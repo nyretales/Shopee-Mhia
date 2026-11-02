@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catatan Titipan Saldo & Belanja Shopee Mhia</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Plus Jakarta Sans -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        shopee: {
+                            orange: '#EE4D2D',
+                            dark: '#D73211',
+                            light: '#FFF1EE',
+                            cream: '#FAF4ED',
+                            card: '#FFF9F5'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FAF4ED; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="text-slate-800 pb-24 md:pb-12">
+
+    <!-- TOP HEADER -->
+    <header class="bg-gradient-to-r from-shopee-orange to-[#FF7337] text-white pt-6 pb-12 px-4 md:px-8 shadow-md rounded-b-[2.5rem]">
+        <div class="max-w-3xl mx-auto flex justify-between items-center">
+            <div>
+                <span class="bg-white/20 text-xs px-3 py-1 rounded-full font-medium tracking-wide">Shopee Titipan Wallet</span>
+                <h1 class="text-2xl font-bold mt-1">Catatan Belanja Mhia</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- TOMBOL ADMIN / VIEWER MODE -->
+                <button type="button" onclick="toggleAdminMode()" id="adminBtn" class="bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm">
+                    <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+                    <span id="adminStatusText">Viewer Mode</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- WALLET CARD CONTAINER -->
+        <div class="max-w-3xl mx-auto mt-6 bg-white text-slate-800 rounded-3xl p-6 shadow-xl border border-orange-100 relative overflow-hidden">
+            <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-orange-50 rounded-full pointer-events-none"></div>
+            
+            <div class="flex justify-between items-start relative z-10">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Sisa Saldo Titipan</p>
+                    <h2 id="totalBalance" class="text-3xl md:text-4xl font-extrabold text-shopee-orange mt-1">Rp 0</h2>
+                </div>
+                <div class="bg-orange-50 text-shopee-orange p-3 rounded-2xl">
+                    <i data-lucide="wallet" class="w-6 h-6"></i>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-100 relative z-10">
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Total Dana Masuk</p>
+                    <p id="totalIncome" class="text-base md:text-lg font-bold text-emerald-600 mt-0.5">Rp 0</p>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400 font-medium">Total Belanja Shopee</p>
+                    <p id="totalExpense" class="text-base md:text-lg font-bold text-rose-600 mt-0.5">Rp 0</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="max-w-3xl mx-auto px-4 md:px-8 -mt-6">
+        
+        <!-- QUICK ACTIONS & SEARCH -->
+        <div class="flex flex-col md:flex-row gap-3 mb-6">
+            <div class="relative flex-1">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-4 top-3.5"></i>
+                <input type="text" id="searchInput" oninput="filterTransactions()" placeholder="Cari nama barang atau catatan..." class="w-full bg-white pl-11 pr-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange shadow-sm">
+            </div>
+            <div class="flex gap-2">
+                <select id="filterType" onchange="filterTransactions()" class="bg-white px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange shadow-sm font-medium text-slate-600">
+                    <option value="all">Semua Riwayat</option>
+                    <option value="expense">Belanja Barang</option>
+                    <option value="income">Tambah Saldo</option>
+                </select>
+                <button type="button" onclick="openAddModal()" id="addModalBtn" class="bg-shopee-orange hover:bg-shopee-dark text-white px-5 py-3 rounded-2xl text-sm font-semibold shadow-lg shadow-orange-500/20 flex items-center gap-2 transition active:scale-95 cursor-pointer">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>Catat Baru</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- TRANSACTIONS LIST CONTAINER -->
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
+            <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                <h3 class="font-bold text-slate-700 text-base">Daftar Transaksi & Barang</h3>
+                <span id="transactionCount" class="text-xs font-semibold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">0 Item</span>
+            </div>
+
+            <div id="transactionList" class="space-y-3">
+                <div class="text-center py-12 text-slate-400">
+                    <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-shopee-orange"></i>
+                    <p class="text-sm">Memuat data dari server...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SHARE / REPORT BUTTON -->
+        <div class="mt-6 text-center">
+            <button type="button" onclick="shareWhatsApp()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3.5 px-6 rounded-2xl shadow-md flex items-center justify-center gap-2 transition cursor-pointer">
+                <i data-lucide="share-2" class="w-5 h-5"></i>
+                <span>Kirim Ringkasan ke WhatsApp Mhia</span>
+            </button>
+        </div>
+    </main>
+
+    <!-- MODAL ADD TRANSACTION (ADMIN ONLY) -->
+    <div id="transactionModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-5">
+                <h3 id="modalTitle" class="text-lg font-bold text-slate-800">Catat Transaksi Baru</h3>
+                <button type="button" onclick="closeAddModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="transactionForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Tipe Transaksi</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button type="button" id="typeExpenseBtn" onclick="setFormType('expense')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer">
+                            <i data-lucide="shopping-bag" class="w-4 h-4"></i> Beli Barang
+                        </button>
+                        <button type="button" id="typeIncomeBtn" onclick="setFormType('income')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer">
+                            <i data-lucide="arrow-down-left" class="w-4 h-4"></i> Tambah Saldo
+                        </button>
+                    </div>
+                    <input type="hidden" id="formType" value="expense">
+                </div>
+
+                <div>
+                    <label id="labelTitle" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nama Barang / Keterangan</label>
+                    <input type="text" id="inputTitle" required placeholder="Contoh: Gamis Anak / Tambahan Dana" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nominal (Rp)</label>
+                    <input type="number" id="inputAmount" required placeholder="Contoh: 125000" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Catatan Tambahan (Opsional)</label>
+                    <textarea id="inputNote" rows="2" placeholder="Link Shopee atau catatan warna/ukuran..." class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange"></textarea>
+                </div>
+
+                <div class="pt-3">
+                    <button type="submit" class="w-full bg-shopee-orange hover:bg-shopee-dark text-white font-semibold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20 transition cursor-pointer">
+                        Simpan Catatan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-medium z-50 transition-all duration-300 opacity-0 pointer-events-none translate-y-4">
+        Notifikasi pesan di sini
+    </div>
+
+    <!-- SCRIPT UTAMA & SUPABASE -->
+    <script>
+        const SUPABASE_URL = "https://dmaikcaqqefwgyfxucig.supabase.co";
+        const SUPABASE_ANON_KEY = "sb_publishable_eD6551rn5-uNM_1xW0OMHw_qJPql6wQ";
+        
+        const { createClient } = supabase;
+        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let transactions = [];
+        let isAdmin = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            fetchTransactions();
+        });
+
+        async function fetchTransactions() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('transactions')
+                    .select('*')
+                    .order('date', { ascending: false });
+
+                if (error) throw error;
+                transactions = data || [];
+                renderDashboard();
+            } catch (err) {
+                console.error("Gagal memuat data:", err);
+                showToast("Gagal memuat data dari database!");
+            }
+        }
+
+        function renderDashboard() {
+            let totalIncome = 0;
+            let totalExpense = 0;
+
+            transactions.forEach(t => {
+                const amount = Number(t.amount);
+                if (t.type === 'income') totalIncome += amount;
+                else if (t.type === 'expense') totalExpense += amount;
+            });
+
+            const currentBalance = totalIncome - totalExpense;
+
+            document.getElementById('totalBalance').innerText = formatRupiah(currentBalance);
+            document.getElementById('totalIncome').innerText = formatRupiah(totalIncome);
+            document.getElementById('totalExpense').innerText = formatRupiah(totalExpense);
+
+            filterTransactions();
+        }
+
+        function filterTransactions() {
+            const keyword = document.getElementById('searchInput').value.toLowerCase();
+            const filterType = document.getElementById('filterType').value;
+
+            const filtered = transactions.filter(t => {
+                const matchesKeyword = t.title.toLowerCase().includes(keyword) || (t.note && t.note.toLowerCase().includes(keyword));
+                const matchesType = filterType === 'all' || t.type === filterType;
+                return matchesKeyword && matchesType;
+            });
+
+            const container = document.getElementById('transactionList');
+            document.getElementById('transactionCount').innerText = `${filtered.length} Item`;
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-slate-400">
+                        <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-slate-300"></i>
+                        <p class="text-sm font-medium">Belum ada catatan transaksi</p>
+                    </div>
+                `;
+                lucide.createIcons();
+                return;
+            }
+
+            container.innerHTML = filtered.map(t => {
+                const isIncome = t.type === 'income';
+                return `
+                    <div class="flex items-center justify-between p-4 rounded-2xl bg-slate-50 hover:bg-slate-100/80 transition border border-slate-100">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-2xl flex items-center justify-center font-bold ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-shopee-orange'}">
+                                <i data-lucide="${isIncome ? 'arrow-down-left' : 'shopping-bag'}" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800 text-sm md:text-base">${escapeHtml(t.title)}</h4>
+                                <p class="text-xs text-slate-400 mt-0.5">${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(t.note) : ''}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="font-extrabold text-sm md:text-base ${isIncome ? 'text-emerald-600' : 'text-slate-800'}">
+                                ${isIncome ? '+' : '-'} ${formatRupiah(t.amount)}
+                            </span>
+                            ${isAdmin ? `
+                                <button type="button" onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        }
+
+        function toggleAdminMode() {
+            if (!isAdmin) {
+                const pin = prompt("Masukkan PIN Admin:");
+                if (pin === "allen") {
+                    isAdmin = true;
+                    document.getElementById('adminStatusText').innerText = "Admin Active";
+                    document.getElementById('adminBtn').className = "bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm";
+                    showToast("Berhasil masuk sebagai Admin!");
+                    renderDashboard();
+                } else if (pin !== null) {
+                    showToast("PIN Salah!");
+                }
+            } else {
+                isAdmin = false;
+                document.getElementById('adminStatusText').innerText = "Viewer Mode";
+                document.getElementById('adminBtn').className = "bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm";
+                showToast("Keluar dari Mode Admin.");
+                renderDashboard();
+            }
+        }
+
+        function openAddModal() {
+            if (!isAdmin) {
+                alert("Akses ditolak! Klik tombol 'Viewer Mode' di pojok kanan atas lalu masukkan PIN Admin untuk mulai mencatat.");
+                return;
+            }
+            document.getElementById('transactionModal').classList.remove('hidden');
+        }
+
+        function closeAddModal() {
+            document.getElementById('transactionModal').classList.add('hidden');
+            document.getElementById('transactionForm').reset();
+            setFormType('expense');
+        }
+
+        function setFormType(type) {
+            document.getElementById('formType').value = type;
+            const expBtn = document.getElementById('typeExpenseBtn');
+            const incBtn = document.getElementById('typeIncomeBtn');
+            const labelTitle = document.getElementById('labelTitle');
+
+            if (type === 'expense') {
+                expBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer";
+                incBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer";
+                labelTitle.innerText = "Nama Barang / Keterangan Belanja";
+            } else {
+                incBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-600 transition flex items-center justify-center gap-2 cursor-pointer";
+                expBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer";
+                labelTitle.innerText = "Keterangan Tambahan Saldo";
+            }
+        }
+
+        async function handleFormSubmit(event) {
+            event.preventDefault();
+            const type = document.getElementById('formType').value;
+            const title = document.getElementById('inputTitle').value;
+            const amount = parseFloat(document.getElementById('inputAmount').value);
+            const note = document.getElementById('inputNote').value;
+
+            const newTx = { type, title, amount, note, date: new Date().toISOString() };
+
+            const { error } = await supabaseClient.from('transactions').insert([newTx]);
+
+            if (error) {
+                console.error(error);
+                showToast("Gagal menyimpan ke database!");
+            } else {
+                showToast("Catatan berhasil disimpan!");
+                closeAddModal();
+                fetchTransactions();
+            }
+        }
+
+        async function deleteTransaction(id) {
+            if (!confirm("Yakin ingin menghapus catatan ini?")) return;
+
+            const { error } = await supabaseClient.from('transactions').delete().eq('id', id);
+
+            if (error) {
+                console.error(error);
+                showToast("Gagal menghapus catatan!");
+            } else {
+                showToast("Catatan berhasil dihapus.");
+                fetchTransactions();
+            }
+        }
+
+        function shareWhatsApp() {
+            let totalIncome = 0;
+            let totalExpense = 0;
+            transactions.forEach(t => {
+                if (t.type === 'income') totalIncome += Number(t.amount);
+                else totalExpense += Number(t.amount);
+            });
+            const balance = totalIncome - totalExpense;
+
+            let text = `*LAPORAN SALDO & BELANJA SHOPEE MHIA*\n`;
+            text += `----------------------------------\n`;
+            text += `💰 *Sisa Saldo Titipan:* ${formatRupiah(balance)}\n`;
+            text += `📥 *Total Dana Masuk:* ${formatRupiah(totalIncome)}\n`;
+            text += `🛍️ *Total Belanja:* ${formatRupiah(totalExpense)}\n\n`;
+            text += `*Daftar Belanja Terakhir:*\n`;
+            
+            transactions.slice(0, 5).forEach((t, i) => {
+                const sign = t.type === 'income' ? '+' : '-';
+                text += `${i + 1}. ${t.title} (${sign}${formatRupiah(t.amount)})\n`;
+            });
+
+            text += `\n_Cek selengkapnya melalui link aplikasi._`;
+            const encoded = encodeURIComponent(text);
+            window.open(`https://wa.me/?text=${encoded}`, '_blank');
+        }
+
+        function formatRupiah(number) {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(number);
+        }
+
+        function formatDate(dateString) {
+            const options = { day: 'numeric', month: 'short', year: 'numeric' };
+            return new Date(dateString).toLocaleDateString('id-ID', options);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
