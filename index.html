@@ -36,6 +36,7 @@
         body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #FAF4ED; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .product-photo { width: 64px; height: 64px; object-fit: cover; border-radius: 14px; flex-shrink: 0; }
     </style>
 </head>
 <body class="text-slate-800 pb-24 md:pb-12">
@@ -140,6 +141,7 @@
             </div>
 
             <form id="transactionForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                <input type="hidden" id="editingId" value="">
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Tipe Transaksi</label>
                     <div class="grid grid-cols-2 gap-3">
@@ -168,8 +170,19 @@
                     <textarea id="inputNote" rows="2" placeholder="Link Shopee atau catatan warna/ukuran..." class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange"></textarea>
                 </div>
 
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Foto Produk (Opsional)</label>
+                    <input type="file" id="inputPhoto" accept="image/*" onchange="previewProductPhoto(event)" class="w-full bg-slate-50 px-3 py-3 rounded-2xl text-sm border border-slate-200">
+                    <p class="text-xs text-slate-400 mt-1">Format gambar JPG, PNG, atau WEBP. Maksimal 5 MB.</p>
+                    <div id="photoPreviewWrap" class="hidden mt-3 flex items-center gap-3">
+                        <img id="photoPreview" src="" alt="Preview foto produk" class="w-20 h-20 object-cover rounded-xl border border-slate-200">
+                        <button type="button" onclick="clearProductPhoto()" class="text-sm text-rose-600 font-semibold">Hapus foto pilihan</button>
+                    </div>
+                    <p id="existingPhotoHint" class="hidden text-xs text-emerald-700 mt-2">Foto lama akan tetap digunakan jika tidak memilih foto baru.</p>
+                </div>
+
                 <div class="pt-3">
-                    <button type="submit" class="w-full bg-shopee-orange hover:bg-shopee-dark text-white font-semibold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20 transition cursor-pointer">
+                    <button id="submitTransactionBtn" type="submit" class="w-full bg-shopee-orange hover:bg-shopee-dark text-white font-semibold py-3.5 rounded-2xl shadow-lg shadow-orange-500/20 transition cursor-pointer">
                         Simpan Catatan
                     </button>
                 </div>
@@ -189,8 +202,11 @@
         
         const { createClient } = supabase;
         const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const PHOTO_BUCKET = "product-photos";
 
         let transactions = [];
+        let currentPhotoUrl = ""; 
+        let currentPhotoPath = "";
         let isAdmin = false;
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -260,12 +276,12 @@
             container.innerHTML = filtered.map(t => {
                 const isIncome = t.type === 'income';
                 return `
-                    <div class="flex items-center justify-between p-4 rounded-2xl bg-slate-50 hover:bg-slate-100/80 transition border border-slate-100">
-                        <div class="flex items-center gap-3.5">
-                            <div class="w-11 h-11 rounded-2xl flex items-center justify-center font-bold ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-shopee-orange'}">
+                    <div class="flex items-center justify-between gap-2 p-4 rounded-2xl bg-slate-50 hover:bg-slate-100/80 transition border border-slate-100">
+                        <div class="flex items-center gap-3 min-w-0">
+                            ${t.image_url ? `<img src="${escapeHtml(t.image_url)}" alt="Foto ${escapeHtml(t.title)}" class="product-photo" loading="lazy">` : `<div class="w-11 h-11 rounded-2xl flex items-center justify-center font-bold flex-shrink-0 ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-shopee-orange'}">
                                 <i data-lucide="${isIncome ? 'arrow-down-left' : 'shopping-bag'}" class="w-5 h-5"></i>
-                            </div>
-                            <div>
+                            </div>`}
+                            <div class="min-w-0">
                                 <h4 class="font-bold text-slate-800 text-sm md:text-base">${escapeHtml(t.title)}</h4>
                                 <p class="text-xs text-slate-400 mt-0.5">${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(t.note) : ''}</p>
                             </div>
@@ -275,6 +291,9 @@
                                 ${isIncome ? '+' : '-'} ${formatRupiah(t.amount)}
                             </span>
                             ${isAdmin ? `
+                                <button type="button" onclick="editTransaction('${t.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Edit">
+                                    <i data-lucide="pencil" class="w-4 h-4"></i>
+                                </button>
                                 <button type="button" onclick="deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus">
                                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                                 </button>
@@ -313,13 +332,96 @@
                 alert("Akses ditolak! Klik tombol 'Viewer Mode' di pojok kanan atas lalu masukkan PIN Admin untuk mulai mencatat.");
                 return;
             }
+            resetTransactionForm();
+            document.getElementById('modalTitle').innerText = "Catat Transaksi Baru";
+            document.getElementById('submitTransactionBtn').innerText = "Simpan Catatan";
             document.getElementById('transactionModal').classList.remove('hidden');
+        }
+
+        function resetTransactionForm() {
+            document.getElementById('transactionForm').reset();
+            document.getElementById('editingId').value = "";
+            currentPhotoUrl = "";
+            currentPhotoPath = "";
+            document.getElementById('photoPreviewWrap').classList.add('hidden');
+            document.getElementById('photoPreview').src = "";
+            document.getElementById('existingPhotoHint').classList.add('hidden');
+            document.getElementById('inputPhoto').value = "";
+            setFormType('expense');
         }
 
         function closeAddModal() {
             document.getElementById('transactionModal').classList.add('hidden');
-            document.getElementById('transactionForm').reset();
-            setFormType('expense');
+            resetTransactionForm();
+        }
+
+        function editTransaction(id) {
+            if (!isAdmin) return;
+            const t = transactions.find(item => item.id === id);
+            if (!t) return;
+
+            resetTransactionForm();
+            document.getElementById('editingId').value = t.id;
+            document.getElementById('inputTitle').value = t.title || "";
+            document.getElementById('inputAmount').value = t.amount || "";
+            document.getElementById('inputNote').value = t.note || "";
+            setFormType(t.type || 'expense');
+
+            currentPhotoUrl = t.image_url || "";
+            currentPhotoPath = t.image_path || "";
+            if (currentPhotoUrl) {
+                document.getElementById('photoPreview').src = currentPhotoUrl;
+                document.getElementById('photoPreviewWrap').classList.remove('hidden');
+                document.getElementById('existingPhotoHint').classList.remove('hidden');
+            }
+
+            document.getElementById('modalTitle').innerText = "Edit Catatan Transaksi";
+            document.getElementById('submitTransactionBtn').innerText = "Simpan Perubahan";
+            document.getElementById('transactionModal').classList.remove('hidden');
+        }
+
+        function previewProductPhoto(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('image/')) {
+                showToast("File harus berupa gambar.");
+                event.target.value = "";
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("Ukuran foto maksimal 5 MB.");
+                event.target.value = "";
+                return;
+            }
+            document.getElementById('photoPreview').src = URL.createObjectURL(file);
+            document.getElementById('photoPreviewWrap').classList.remove('hidden');
+        }
+
+        function clearProductPhoto() {
+            document.getElementById('inputPhoto').value = "";
+            currentPhotoUrl = "";
+            currentPhotoPath = "";
+            document.getElementById('photoPreview').src = "";
+            document.getElementById('photoPreviewWrap').classList.add('hidden');
+            document.getElementById('existingPhotoHint').classList.add('hidden');
+        }
+
+        async function uploadProductPhoto(file) {
+            if (!file) return { image_url: currentPhotoUrl || null, image_path: currentPhotoPath || null };
+            const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const filePath = `transactions/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: uploadError } = await supabaseClient.storage
+                .from(PHOTO_BUCKET)
+                .upload(filePath, file, { cacheControl: '3600', upsert: false, contentType: file.type });
+            if (uploadError) throw uploadError;
+            const { data } = supabaseClient.storage.from(PHOTO_BUCKET).getPublicUrl(filePath);
+            return { image_url: data.publicUrl, image_path: filePath };
+        }
+
+        async function removeStoredPhoto(path) {
+            if (!path) return;
+            const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).remove([path]);
+            if (error) console.warn("Foto lama tidak berhasil dihapus:", error.message);
         }
 
         function setFormType(type) {
@@ -341,34 +443,77 @@
 
         async function handleFormSubmit(event) {
             event.preventDefault();
-            const type = document.getElementById('formType').value;
-            const title = document.getElementById('inputTitle').value;
-            const amount = parseFloat(document.getElementById('inputAmount').value);
-            const note = document.getElementById('inputNote').value;
+            if (!isAdmin) {
+                showToast("Akses ditolak. Masuk sebagai Admin terlebih dahulu.");
+                return;
+            }
 
-            const newTx = { type, title, amount, note, date: new Date().toISOString() };
+            const submitBtn = document.getElementById('submitTransactionBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerText = "Menyimpan...";
 
-            const { error } = await supabaseClient.from('transactions').insert([newTx]);
+            try {
+                const type = document.getElementById('formType').value;
+                const title = document.getElementById('inputTitle').value.trim();
+                const amount = Number(document.getElementById('inputAmount').value);
+                const note = document.getElementById('inputNote').value.trim();
+                const editingId = document.getElementById('editingId').value;
+                const photoFile = document.getElementById('inputPhoto').files[0];
 
-            if (error) {
-                console.error(error);
-                showToast("Gagal menyimpan ke database!");
-            } else {
-                showToast("Catatan berhasil disimpan!");
+                if (!title || !Number.isFinite(amount) || amount <= 0) {
+                    throw new Error("Nama/keterangan dan nominal harus diisi dengan benar.");
+                }
+
+                const oldTransaction = editingId ? transactions.find(t => t.id === editingId) : null;
+                const uploadedPhoto = await uploadProductPhoto(photoFile);
+                const payload = {
+                    type, title, amount, note,
+                    image_url: uploadedPhoto.image_url,
+                    image_path: uploadedPhoto.image_path
+                };
+
+                let result;
+                if (editingId) {
+                    result = await supabaseClient.from('transactions').update(payload).eq('id', editingId);
+                } else {
+                    payload.date = new Date().toISOString();
+                    result = await supabaseClient.from('transactions').insert([payload]);
+                }
+
+                if (result.error) throw result.error;
+
+                if (oldTransaction?.image_path && oldTransaction.image_path !== uploadedPhoto.image_path) {
+                    await removeStoredPhoto(oldTransaction.image_path);
+                }
+
+                showToast(editingId ? "Catatan berhasil diperbarui!" : "Catatan berhasil disimpan!");
                 closeAddModal();
-                fetchTransactions();
+                await fetchTransactions();
+            } catch (error) {
+                console.error("Gagal menyimpan transaksi:", error);
+                alert(
+                    "Gagal menyimpan catatan.\n\n" +
+                    "Pesan: " + (error.message || "Tidak diketahui") +
+                    "\nKode: " + (error.code || "-") +
+                    "\nPetunjuk: " + (error.hint || "-")
+                );
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = document.getElementById('editingId').value ? "Simpan Perubahan" : "Simpan Catatan";
             }
         }
 
         async function deleteTransaction(id) {
             if (!confirm("Yakin ingin menghapus catatan ini?")) return;
 
+            const target = transactions.find(t => t.id === id);
             const { error } = await supabaseClient.from('transactions').delete().eq('id', id);
 
             if (error) {
                 console.error(error);
                 showToast("Gagal menghapus catatan!");
             } else {
+                if (target?.image_path) await removeStoredPhoto(target.image_path);
                 showToast("Catatan berhasil dihapus.");
                 fetchTransactions();
             }
@@ -410,7 +555,7 @@
         }
 
         function escapeHtml(str) {
-            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            return String(str ?? '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
         function showToast(message) {
