@@ -10,8 +10,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- Supabase JS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -116,7 +114,7 @@
             <div id="transactionList" class="space-y-3">
                 <div class="text-center py-12 text-slate-400">
                     <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-shopee-orange"></i>
-                    <p class="text-sm">Memuat data dari server...</p>
+                    <p class="text-sm">Memuat data lokal...</p>
                 </div>
             </div>
         </div>
@@ -158,6 +156,7 @@
                     </div>
                     <div class="mt-6 pt-5 border-t border-slate-100">
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Informasi Transaksi</h3>
+                        <div class="flex justify-between gap-4 py-2 text-sm"><span class="text-slate-500">Nomor transaksi</span><strong id="detailTransactionNo" class="text-slate-800 text-right"></strong></div>
                         <div class="flex justify-between gap-4 py-2 text-sm"><span class="text-slate-500">Jenis transaksi</span><strong id="detailTypeText" class="text-slate-800 text-right"></strong></div>
                         <div class="flex justify-between gap-4 py-2 text-sm"><span class="text-slate-500">Nominal</span><strong id="detailAmountText" class="text-slate-800 text-right"></strong></div>
                         <div class="flex justify-between gap-4 py-2 text-sm"><span class="text-slate-500">Tanggal</span><strong id="detailDateText" class="text-slate-800 text-right"></strong></div>
@@ -210,15 +209,10 @@
                     <textarea id="inputNote" rows="2" placeholder="Link Shopee atau catatan warna/ukuran..." class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange"></textarea>
                 </div>
 
-                <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Foto Produk (Opsional)</label>
-                    <input type="file" id="inputPhoto" accept="image/*" onchange="previewProductPhoto(event)" class="w-full bg-slate-50 px-3 py-3 rounded-2xl text-sm border border-slate-200">
-                    <p class="text-xs text-slate-400 mt-1">Format gambar JPG, PNG, atau WEBP. Maksimal 5 MB.</p>
-                    <div id="photoPreviewWrap" class="hidden mt-3 flex items-center gap-3">
-                        <img id="photoPreview" src="" alt="Preview foto produk" class="w-20 h-20 object-cover rounded-xl border border-slate-200">
-                        <button type="button" onclick="clearProductPhoto()" class="text-sm text-rose-600 font-semibold">Hapus foto pilihan</button>
-                    </div>
-                    <p id="existingPhotoHint" class="hidden text-xs text-emerald-700 mt-2">Foto lama akan tetap digunakan jika tidak memilih foto baru.</p>
+                <div class="rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i data-lucide="image" class="w-4 h-4 text-shopee-orange"></i> Foto Produk (Manual)</div>
+                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">Setelah transaksi disimpan, letakkan foto secara manual di folder <b>assets/</b> dengan nama sesuai nomor transaksi saja, misalnya <b>1.jpg</b>, <b>2.jpg</b>, dan seterusnya. Format yang didukung: JPG, JPEG, PNG, atau WebP.</p>
+                    <p class="text-xs text-slate-500 mt-1">Nomor transaksi dibuat otomatis dan tidak berubah saat transaksi diedit.</p>
                 </div>
 
                 <div class="pt-3">
@@ -235,157 +229,181 @@
         Notifikasi pesan di sini
     </div>
 
-    <!-- SCRIPT UTAMA & SUPABASE -->
+    <!-- SCRIPT UTAMA: PENYIMPANAN LOKAL -->
     <script>
-        const SUPABASE_URL = "https://dmaikcaqqefwgyfxucig.supabase.co";
-        const SUPABASE_ANON_KEY = "sb_publishable_eD6551rn5-uNM_1xW0OMHw_qJPql6wQ";
-        
-        const { createClient } = supabase;
-        const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const PHOTO_BUCKET = "product-photos";
+        /*
+         * Data transaksi disimpan di IndexedDB lokal browser/perangkat ini.
+         * Foto transaksi ditambahkan manual ke folder assets/ dengan nama nomor transaksi,
+         * contoh: assets/1.jpg, assets/2.jpg, assets/3.jpg.
+         */
+        const DB_NAME = 'ShopeeMhiaLocalDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'transactions';
 
+        let db = null;
         let transactions = [];
-        let currentPhotoUrl = ""; 
-        let currentPhotoPath = "";
         let isAdmin = false;
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
-            fetchTransactions();
+            try {
+                await openLocalDatabase();
+                await fetchTransactions();
+            } catch (error) {
+                console.error('Gagal membuka penyimpanan lokal:', error);
+                showToast('Penyimpanan lokal tidak dapat dibuka di browser ini.');
+                document.getElementById('transactionList').innerHTML =
+                    '<p class="text-center py-8 text-rose-500 text-sm">Penyimpanan lokal tidak tersedia. Coba buka aplikasi melalui browser modern.</p>';
+            }
         });
+
+        function openLocalDatabase() {
+            return new Promise((resolve, reject) => {
+                if (!('indexedDB' in window)) {
+                    reject(new Error('Browser tidak mendukung IndexedDB.'));
+                    return;
+                }
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = event => {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_NAME)) {
+                        const store = database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                        store.createIndex('date', 'date', { unique: false });
+                    }
+                };
+                request.onsuccess = () => {
+                    db = request.result;
+                    db.onversionchange = () => db.close();
+                    resolve(db);
+                };
+                request.onerror = () => reject(request.error || new Error('Database lokal gagal dibuka.'));
+            });
+        }
+
+        function dbRequest(mode, action, value) {
+            return new Promise((resolve, reject) => {
+                if (!db) return reject(new Error('Database lokal belum siap.'));
+                const tx = db.transaction(STORE_NAME, mode);
+                const store = tx.objectStore(STORE_NAME);
+                const request = action === 'getAll' ? store.getAll()
+                    : action === 'put' ? store.put(value)
+                    : store.delete(value);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error || new Error('Operasi penyimpanan gagal.'));
+                tx.onabort = () => reject(tx.error || new Error('Transaksi penyimpanan dibatalkan.'));
+            });
+        }
 
         async function fetchTransactions() {
             try {
-                const { data, error } = await supabaseClient
-                    .from('transactions')
-                    .select('*')
-                    .order('date', { ascending: false });
-
-                if (error) throw error;
-                transactions = data || [];
+                transactions = await dbRequest('readonly', 'getAll');
+                transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+                // Beri nomor berurutan pada transaksi lama yang belum memiliki nomor.
+                let maxNo = transactions.reduce((max, t) => Math.max(max, Number(t.transaction_no) || 0), 0);
+                for (const t of transactions) {
+                    if (!t.transaction_no) {
+                        t.transaction_no = ++maxNo;
+                        await dbRequest('readwrite', 'put', t);
+                    }
+                }
+                transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
                 renderDashboard();
             } catch (err) {
-                console.error("Gagal memuat data:", err);
-                showToast("Gagal memuat data dari database!");
+                console.error('Gagal memuat data lokal:', err);
+                showToast('Gagal memuat catatan dari penyimpanan perangkat.');
             }
         }
 
         function renderDashboard() {
             let totalIncome = 0;
             let totalExpense = 0;
-
             transactions.forEach(t => {
                 const amount = Number(t.amount);
                 if (t.type === 'income') totalIncome += amount;
                 else if (t.type === 'expense') totalExpense += amount;
             });
-
-            const currentBalance = totalIncome - totalExpense;
-
-            document.getElementById('totalBalance').innerText = formatRupiah(currentBalance);
+            document.getElementById('totalBalance').innerText = formatRupiah(totalIncome - totalExpense);
             document.getElementById('totalIncome').innerText = formatRupiah(totalIncome);
             document.getElementById('totalExpense').innerText = formatRupiah(totalExpense);
-
             filterTransactions();
         }
 
         function filterTransactions() {
             const keyword = document.getElementById('searchInput').value.toLowerCase();
             const filterType = document.getElementById('filterType').value;
-
             const filtered = transactions.filter(t => {
-                const matchesKeyword = t.title.toLowerCase().includes(keyword) || (t.note && t.note.toLowerCase().includes(keyword));
-                const matchesType = filterType === 'all' || t.type === filterType;
-                return matchesKeyword && matchesType;
+                const matchesKeyword = (t.title || '').toLowerCase().includes(keyword) ||
+                    (t.note && t.note.toLowerCase().includes(keyword));
+                return matchesKeyword && (filterType === 'all' || t.type === filterType);
             });
-
             const container = document.getElementById('transactionList');
             document.getElementById('transactionCount').innerText = `${filtered.length} Item`;
-
             if (filtered.length === 0) {
                 container.innerHTML = `
                     <div class="text-center py-10 text-slate-400">
                         <i data-lucide="folder-open" class="w-10 h-10 mx-auto mb-2 text-slate-300"></i>
                         <p class="text-sm font-medium">Belum ada catatan transaksi</p>
-                    </div>
-                `;
+                    </div>`;
                 lucide.createIcons();
                 return;
             }
-
             container.innerHTML = filtered.map(t => {
                 const isIncome = t.type === 'income';
                 return `
                     <div role="button" tabindex="0" onclick="openTransactionDetail('${t.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTransactionDetail('${t.id}')}" class="flex items-center justify-between gap-2 p-4 rounded-2xl bg-slate-50 hover:bg-orange-50 transition border border-slate-100 cursor-pointer">
                         <div class="flex items-center gap-3 min-w-0">
-                            ${t.image_url ? `<img src="${escapeHtml(t.image_url)}" alt="Foto ${escapeHtml(t.title)}" class="product-photo" loading="lazy">` : `<div class="w-11 h-11 rounded-2xl flex items-center justify-center font-bold flex-shrink-0 ${isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-orange-100 text-shopee-orange'}">
-                                <i data-lucide="${isIncome ? 'arrow-down-left' : 'shopping-bag'}" class="w-5 h-5"></i>
-                            </div>`}
+                            ${`<img src="${escapeHtml(transactionPhotoPath(t))}" onerror="tryNextTransactionPhoto(this)" alt="Foto ${escapeHtml(t.title)}" class="product-photo" data-transaction-no="${Number(t.transaction_no)}" loading="lazy">`}
                             <div class="min-w-0">
                                 <h4 class="font-bold text-slate-800 text-sm md:text-base">${escapeHtml(t.title)}</h4>
-                                <p class="text-xs text-slate-400 mt-0.5">${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(t.note) : ''}</p>
+                                <p class="text-xs text-slate-400 mt-0.5">No. ${Number(t.transaction_no)} • ${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(t.note) : ''}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
-                            <span class="font-extrabold text-sm md:text-base ${isIncome ? 'text-emerald-600' : 'text-slate-800'}">
-                                ${isIncome ? '+' : '-'} ${formatRupiah(t.amount)}
-                            </span>
+                            <span class="font-extrabold text-sm md:text-base ${isIncome ? 'text-emerald-600' : 'text-slate-800'}">${isIncome ? '+' : '-'} ${formatRupiah(t.amount)}</span>
                             ${isAdmin ? `
-                                <button type="button" onclick="event.stopPropagation();editTransaction('${t.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Edit">
-                                    <i data-lucide="pencil" class="w-4 h-4"></i>
-                                </button>
-                                <button type="button" onclick="event.stopPropagation();deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus">
-                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
-                                </button>
-                            ` : ''}
+                                <button type="button" onclick="event.stopPropagation();editTransaction('${t.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                                <button type="button" onclick="event.stopPropagation();deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
                         </div>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
-
             lucide.createIcons();
         }
 
-
         function openTransactionDetail(id) {
             const t = transactions.find(item => item.id === id);
-            if (!t) {
-                showToast("Data transaksi tidak ditemukan.");
-                return;
-            }
+            if (!t) return showToast('Data transaksi tidak ditemukan.');
             const isIncome = t.type === 'income';
             const dateText = formatDate(t.date);
             const amountText = formatRupiah(t.amount);
-
             document.getElementById('detailTitle').textContent = t.title || 'Tanpa nama';
             document.getElementById('detailAmount').textContent = (isIncome ? '+ ' : '- ') + amountText;
             document.getElementById('detailAmount').className = 'text-2xl md:text-3xl font-extrabold mt-3 ' + (isIncome ? 'text-emerald-600' : 'text-shopee-orange');
             document.getElementById('detailType').textContent = isIncome ? 'Tambah Saldo' : 'Belanja Barang';
             document.getElementById('detailType').className = 'inline-flex items-center px-3 py-1.5 rounded-full text-sm font-bold ' + (isIncome ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-shopee-orange');
             document.getElementById('detailTypeText').textContent = isIncome ? 'Tambah Saldo' : 'Belanja Barang';
+            document.getElementById('detailTransactionNo').textContent = Number(t.transaction_no);
             document.getElementById('detailAmountText').textContent = amountText;
             document.getElementById('detailDate').textContent = dateText;
             document.getElementById('detailDateText').textContent = dateText;
-
             const note = (t.note || '').trim();
             document.getElementById('detailNote').textContent = note;
             document.getElementById('detailNote').classList.toggle('hidden', !note);
             document.getElementById('detailEmptyNote').classList.toggle('hidden', !!note);
-
             const photoWrap = document.getElementById('detailPhotoWrap');
             const noPhoto = document.getElementById('detailNoPhoto');
             const photo = document.getElementById('detailPhoto');
-            if (t.image_url) {
-                photo.src = t.image_url;
-                photo.alt = 'Foto produk: ' + (t.title || '');
-                photoWrap.classList.remove('hidden');
-                noPhoto.classList.add('hidden');
-            } else {
-                photo.removeAttribute('src');
-                photoWrap.classList.add('hidden');
-                noPhoto.classList.remove('hidden');
-            }
-
+            photo.dataset.extensionIndex = '0';
+            photo.dataset.transactionNo = String(Number(t.transaction_no));
+            photo.onerror = function () {
+                tryNextTransactionPhoto(this, () => {
+                    photoWrap.classList.add('hidden');
+                    noPhoto.classList.remove('hidden');
+                });
+            };
+            photo.src = transactionPhotoPath(t);
+            photo.alt = 'Foto produk: ' + (t.title || '');
+            photoWrap.classList.remove('hidden');
+            noPhoto.classList.add('hidden');
             document.getElementById('transactionDetailPage').classList.remove('hidden');
             document.getElementById('transactionDetailPage').scrollTop = 0;
             lucide.createIcons();
@@ -397,21 +415,19 @@
 
         function toggleAdminMode() {
             if (!isAdmin) {
-                const pin = prompt("Masukkan PIN Admin:");
-                if (pin === "allen") {
+                const pin = prompt('Masukkan PIN Admin:');
+                if (pin === 'allen') {
                     isAdmin = true;
-                    document.getElementById('adminStatusText').innerText = "Admin Active";
-                    document.getElementById('adminBtn').className = "bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm";
-                    showToast("Berhasil masuk sebagai Admin!");
+                    document.getElementById('adminStatusText').innerText = 'Admin Active';
+                    document.getElementById('adminBtn').className = 'bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
+                    showToast('Berhasil masuk sebagai Admin!');
                     renderDashboard();
-                } else if (pin !== null) {
-                    showToast("PIN Salah!");
-                }
+                } else if (pin !== null) showToast('PIN Salah!');
             } else {
                 isAdmin = false;
-                document.getElementById('adminStatusText').innerText = "Viewer Mode";
-                document.getElementById('adminBtn').className = "bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm";
-                showToast("Keluar dari Mode Admin.");
+                document.getElementById('adminStatusText').innerText = 'Viewer Mode';
+                document.getElementById('adminBtn').className = 'bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
+                showToast('Keluar dari Mode Admin.');
                 renderDashboard();
             }
         }
@@ -422,20 +438,14 @@
                 return;
             }
             resetTransactionForm();
-            document.getElementById('modalTitle').innerText = "Catat Transaksi Baru";
-            document.getElementById('submitTransactionBtn').innerText = "Simpan Catatan";
+            document.getElementById('modalTitle').innerText = 'Catat Transaksi Baru';
+            document.getElementById('submitTransactionBtn').innerText = 'Simpan Catatan';
             document.getElementById('transactionModal').classList.remove('hidden');
         }
 
         function resetTransactionForm() {
             document.getElementById('transactionForm').reset();
-            document.getElementById('editingId').value = "";
-            currentPhotoUrl = "";
-            currentPhotoPath = "";
-            document.getElementById('photoPreviewWrap').classList.add('hidden');
-            document.getElementById('photoPreview').src = "";
-            document.getElementById('existingPhotoHint').classList.add('hidden');
-            document.getElementById('inputPhoto').value = "";
+            document.getElementById('editingId').value = '';
             setFormType('expense');
         }
 
@@ -448,178 +458,15 @@
             if (!isAdmin) return;
             const t = transactions.find(item => item.id === id);
             if (!t) return;
-
             resetTransactionForm();
             document.getElementById('editingId').value = t.id;
-            document.getElementById('inputTitle').value = t.title || "";
-            document.getElementById('inputAmount').value = t.amount || "";
-            document.getElementById('inputNote').value = t.note || "";
+            document.getElementById('inputTitle').value = t.title || '';
+            document.getElementById('inputAmount').value = t.amount || '';
+            document.getElementById('inputNote').value = t.note || '';
             setFormType(t.type || 'expense');
-
-            currentPhotoUrl = t.image_url || "";
-            currentPhotoPath = t.image_path || "";
-            if (currentPhotoUrl) {
-                document.getElementById('photoPreview').src = currentPhotoUrl;
-                document.getElementById('photoPreviewWrap').classList.remove('hidden');
-                document.getElementById('existingPhotoHint').classList.remove('hidden');
-            }
-
-            document.getElementById('modalTitle').innerText = "Edit Catatan Transaksi";
-            document.getElementById('submitTransactionBtn').innerText = "Simpan Perubahan";
+            document.getElementById('modalTitle').innerText = 'Edit Catatan Transaksi';
+            document.getElementById('submitTransactionBtn').innerText = 'Simpan Perubahan';
             document.getElementById('transactionModal').classList.remove('hidden');
-        }
-
-        function previewProductPhoto(event) {
-            const file = event.target.files && event.target.files[0];
-            if (!file) return;
-            if (!file.type.startsWith('image/')) {
-                showToast("File harus berupa gambar.");
-                event.target.value = "";
-                return;
-            }
-            if (file.size > 5 * 1024 * 1024) {
-                showToast("Ukuran foto maksimal 5 MB.");
-                event.target.value = "";
-                return;
-            }
-            document.getElementById('photoPreview').src = URL.createObjectURL(file);
-            document.getElementById('photoPreviewWrap').classList.remove('hidden');
-        }
-
-        function clearProductPhoto() {
-            document.getElementById('inputPhoto').value = "";
-            currentPhotoUrl = "";
-            currentPhotoPath = "";
-            document.getElementById('photoPreview').src = "";
-            document.getElementById('photoPreviewWrap').classList.add('hidden');
-            document.getElementById('existingPhotoHint').classList.add('hidden');
-        }
-
-        // Kompresi foto di perangkat agar upload dari HP lebih ringan dan stabil.
-        async function compressProductImage(file) {
-            if (!file || !file.type || !file.type.startsWith('image/')) {
-                throw new Error('File yang dipilih bukan gambar yang valid.');
-            }
-
-            // Foto kecil tidak perlu diproses ulang.
-            if (file.size <= 450 * 1024 && file.type === 'image/jpeg') return file;
-
-            try {
-                let bitmap;
-                if ('createImageBitmap' in window) {
-                    bitmap = await createImageBitmap(file);
-                } else {
-                    bitmap = await new Promise((resolve, reject) => {
-                        const img = new Image();
-                        const url = URL.createObjectURL(file);
-                        img.onload = () => {
-                            URL.revokeObjectURL(url);
-                            resolve(img);
-                        };
-                        img.onerror = () => {
-                            URL.revokeObjectURL(url);
-                            reject(new Error('Foto tidak dapat dibaca oleh browser.'));
-                        };
-                        img.src = url;
-                    });
-                }
-
-                const maxSide = 1600;
-                const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-                canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
-                const ctx = canvas.getContext('2d', { alpha: false });
-                if (!ctx) throw new Error('Browser tidak mendukung pemrosesan foto.');
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-                if (bitmap.close) bitmap.close();
-
-                const blob = await new Promise((resolve, reject) => {
-                    canvas.toBlob(
-                        result => result ? resolve(result) : reject(new Error('Kompresi foto gagal.')),
-                        'image/jpeg',
-                        0.82
-                    );
-                });
-
-                return new File([blob], `foto-${Date.now()}.jpg`, {
-                    type: 'image/jpeg',
-                    lastModified: Date.now()
-                });
-            } catch (compressionError) {
-                console.warn('Kompresi foto dilewati:', compressionError);
-                // Jika browser tidak mendukung kompresi, coba unggah file asli.
-                return file;
-            }
-        }
-
-        async function uploadProductPhoto(file) {
-            if (!file) {
-                return {
-                    image_url: currentPhotoUrl || null,
-                    image_path: currentPhotoPath || null
-                };
-            }
-
-            if (file.size > 5 * 1024 * 1024) {
-                throw new Error('Ukuran foto melebihi 5 MB. Pilih foto yang lebih kecil.');
-            }
-
-            const uploadFile = await compressProductImage(file);
-            const extension = uploadFile.type === 'image/jpeg' ? 'jpg' :
-                (uploadFile.type === 'image/png' ? 'png' :
-                (uploadFile.type === 'image/webp' ? 'webp' : 'jpg'));
-            const filePath = `transactions/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
-
-            let lastError = null;
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                try {
-                    const { data, error } = await supabaseClient.storage
-                        .from(PHOTO_BUCKET)
-                        .upload(filePath, uploadFile, {
-                            cacheControl: '3600',
-                            upsert: false,
-                            contentType: uploadFile.type || 'image/jpeg'
-                        });
-
-                    if (error) throw error;
-
-                    const { data: publicData } = supabaseClient.storage
-                        .from(PHOTO_BUCKET)
-                        .getPublicUrl(data.path || filePath);
-
-                    return {
-                        image_url: publicData.publicUrl,
-                        image_path: data.path || filePath
-                    };
-                } catch (error) {
-                    lastError = error;
-                    console.error(`Upload foto percobaan ${attempt} gagal:`, error);
-
-                    // Jangan mengulang error izin/validasi karena pengulangan tidak akan membantu.
-                    const status = Number(error.statusCode || error.status || 0);
-                    if (status >= 400 && status < 500 && status !== 408 && status !== 429) break;
-                    if (attempt < 3) {
-                        await new Promise(resolve => setTimeout(resolve, attempt * 900));
-                    }
-                }
-            }
-
-            if (lastError instanceof TypeError || lastError?.message === 'Failed to fetch') {
-                throw new Error(
-                    'Koneksi ke Supabase Storage terputus saat mengunggah foto. ' +
-                    'Periksa koneksi internet, lalu coba lagi. Foto lama dan catatan belum diganti.'
-                );
-            }
-            throw lastError || new Error('Upload foto gagal tanpa keterangan dari server.');
-        }
-
-        async function removeStoredPhoto(path) {
-            if (!path) return;
-            const { error } = await supabaseClient.storage.from(PHOTO_BUCKET).remove([path]);
-            if (error) console.warn("Foto lama tidak berhasil dihapus:", error.message);
         }
 
         function setFormType(type) {
@@ -627,142 +474,119 @@
             const expBtn = document.getElementById('typeExpenseBtn');
             const incBtn = document.getElementById('typeIncomeBtn');
             const labelTitle = document.getElementById('labelTitle');
-
             if (type === 'expense') {
-                expBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer";
-                incBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer";
-                labelTitle.innerText = "Nama Barang / Keterangan Belanja";
+                expBtn.className = 'py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer';
+                incBtn.className = 'py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer';
+                labelTitle.innerText = 'Nama Barang / Keterangan Belanja';
             } else {
-                incBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-600 transition flex items-center justify-center gap-2 cursor-pointer";
-                expBtn.className = "py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer";
-                labelTitle.innerText = "Keterangan Tambahan Saldo";
+                incBtn.className = 'py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-emerald-600 bg-emerald-50 text-emerald-600 transition flex items-center justify-center gap-2 cursor-pointer';
+                expBtn.className = 'py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer';
+                labelTitle.innerText = 'Keterangan Tambahan Saldo';
             }
         }
 
         async function handleFormSubmit(event) {
             event.preventDefault();
-            if (!isAdmin) {
-                showToast("Akses ditolak. Masuk sebagai Admin terlebih dahulu.");
-                return;
-            }
-
+            if (!isAdmin) return showToast('Akses ditolak. Masuk sebagai Admin terlebih dahulu.');
             const submitBtn = document.getElementById('submitTransactionBtn');
             submitBtn.disabled = true;
-            submitBtn.innerText = "Menyimpan...";
-
+            submitBtn.innerText = 'Menyimpan...';
             try {
                 const type = document.getElementById('formType').value;
                 const title = document.getElementById('inputTitle').value.trim();
                 const amount = Number(document.getElementById('inputAmount').value);
                 const note = document.getElementById('inputNote').value.trim();
                 const editingId = document.getElementById('editingId').value;
-                const photoFile = document.getElementById('inputPhoto').files[0];
-
-                if (!title || !Number.isFinite(amount) || amount <= 0) {
-                    throw new Error("Nama/keterangan dan nominal harus diisi dengan benar.");
-                }
-
-                const oldTransaction = editingId ? transactions.find(t => t.id === editingId) : null;
-                const uploadedPhoto = await uploadProductPhoto(photoFile);
+                if (!title || !Number.isFinite(amount) || amount <= 0) throw new Error('Nama/keterangan dan nominal harus diisi dengan benar.');
+                const old = editingId ? transactions.find(t => t.id === editingId) : null;
+                const nextNo = old ? old.transaction_no : (transactions.reduce((max, t) => Math.max(max, Number(t.transaction_no) || 0), 0) + 1);
                 const payload = {
+                    id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                    transaction_no: nextNo,
                     type, title, amount, note,
-                    image_url: uploadedPhoto.image_url,
-                    image_path: uploadedPhoto.image_path
+                    date: old ? old.date : new Date().toISOString()
                 };
-
-                let result;
-                if (editingId) {
-                    result = await supabaseClient.from('transactions').update(payload).eq('id', editingId);
-                } else {
-                    payload.date = new Date().toISOString();
-                    result = await supabaseClient.from('transactions').insert([payload]);
-                }
-
-                if (result.error) throw result.error;
-
-                if (oldTransaction?.image_path && oldTransaction.image_path !== uploadedPhoto.image_path) {
-                    await removeStoredPhoto(oldTransaction.image_path);
-                }
-
-                showToast(editingId ? "Catatan berhasil diperbarui!" : "Catatan berhasil disimpan!");
+                await dbRequest('readwrite', 'put', payload);
+                showToast(editingId ? 'Catatan berhasil diperbarui!' : 'Catatan berhasil disimpan!');
                 closeAddModal();
                 await fetchTransactions();
             } catch (error) {
-                console.error("Gagal menyimpan transaksi:", error);
-                alert(
-                    "Gagal menyimpan catatan.\n\n" +
-                    "Pesan: " + (error.message || "Tidak diketahui") +
-                    "\nKode: " + (error.code || "-") +
-                    "\nPetunjuk: " + (error.hint || "-")
-                );
+                console.error('Gagal menyimpan transaksi:', error);
+                alert('Gagal menyimpan catatan.\n\nPesan: ' + (error.message || 'Tidak diketahui'));
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerText = document.getElementById('editingId').value ? "Simpan Perubahan" : "Simpan Catatan";
+                submitBtn.innerText = document.getElementById('editingId').value ? 'Simpan Perubahan' : 'Simpan Catatan';
             }
         }
 
         async function deleteTransaction(id) {
-            if (!confirm("Yakin ingin menghapus catatan ini?")) return;
-
-            const target = transactions.find(t => t.id === id);
-            const { error } = await supabaseClient.from('transactions').delete().eq('id', id);
-
-            if (error) {
+            if (!confirm('Yakin ingin menghapus catatan ini?')) return;
+            try {
+                await dbRequest('readwrite', 'delete', id);
+                showToast('Catatan berhasil dihapus.');
+                await fetchTransactions();
+            } catch (error) {
                 console.error(error);
-                showToast("Gagal menghapus catatan!");
-            } else {
-                if (target?.image_path) await removeStoredPhoto(target.image_path);
-                showToast("Catatan berhasil dihapus.");
-                fetchTransactions();
+                showToast('Gagal menghapus catatan.');
             }
         }
 
         function shareWhatsApp() {
-            let totalIncome = 0;
-            let totalExpense = 0;
+            let totalIncome = 0, totalExpense = 0;
             transactions.forEach(t => {
                 if (t.type === 'income') totalIncome += Number(t.amount);
                 else totalExpense += Number(t.amount);
             });
             const balance = totalIncome - totalExpense;
-
-            let text = `*LAPORAN SALDO & BELANJA SHOPEE MHIA*\n`;
-            text += `----------------------------------\n`;
+            let text = '*LAPORAN SALDO & BELANJA SHOPEE MHIA*\n--\n';
             text += `💰 *Sisa Saldo Titipan:* ${formatRupiah(balance)}\n`;
             text += `📥 *Total Dana Masuk:* ${formatRupiah(totalIncome)}\n`;
-            text += `🛍️ *Total Belanja:* ${formatRupiah(totalExpense)}\n\n`;
-            text += `*Daftar Belanja Terakhir:*\n`;
-            
+            text += `🛍️ *Total Belanja:* ${formatRupiah(totalExpense)}\n\n*Daftar Belanja Terakhir:*\n`;
             transactions.slice(0, 5).forEach((t, i) => {
-                const sign = t.type === 'income' ? '+' : '-';
-                text += `${i + 1}. ${t.title} (${sign}${formatRupiah(t.amount)})\n`;
+                text += `${i + 1}. ${t.title} (${t.type === 'income' ? '+' : '-'}${formatRupiah(t.amount)})\n`;
             });
+            text += '\n_Cek selengkapnya melalui link aplikasi._';
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        }
 
-            text += `\n_Cek selengkapnya melalui link aplikasi._`;
-            const encoded = encodeURIComponent(text);
-            window.open(`https://wa.me/?text=${encoded}`, '_blank');
+        function transactionPhotoPath(transaction) {
+            return `assets/${Number(transaction.transaction_no)}.jpg`;
+        }
+
+        function tryNextTransactionPhoto(img, onAllFailed) {
+            const extensions = ['jpg', 'jpeg', 'png', 'webp'];
+            const current = Number(img.dataset.extensionIndex || 0);
+            const next = current + 1;
+            if (next >= extensions.length) {
+                if (typeof onAllFailed === 'function') onAllFailed();
+                else {
+                    const wrapper = img.parentElement;
+                    if (wrapper) img.style.display = 'none';
+                }
+                return;
+            }
+            img.dataset.extensionIndex = String(next);
+            const transactionNo = img.closest('[data-transaction-no]')?.dataset.transactionNo || img.dataset.transactionNo;
+            const match = img.src.match(/assets\/(\d+)\.[a-z0-9]+(?:\?.*)?$/i);
+            const number = transactionNo || (match && match[1]);
+            if (!number) return;
+            img.src = `assets/${number}.${extensions[next]}`;
         }
 
         function formatRupiah(number) {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(number);
         }
-
         function formatDate(dateString) {
-            const options = { day: 'numeric', month: 'short', year: 'numeric' };
-            return new Date(dateString).toLocaleDateString('id-ID', options);
+            return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
         }
-
         function escapeHtml(str) {
-            return String(str ?? '').replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
-
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.innerText = message;
             toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
-            setTimeout(() => {
-                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
-            }, 3000);
+            setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 3000);
         }
     </script>
 </body>
