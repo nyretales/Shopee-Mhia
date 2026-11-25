@@ -77,6 +77,17 @@
       "date": "2026-11-25T08:40:08.345Z",
       "photo": "assets/7.jpg",
       "photo_rev": 1795596012131
+    },
+    {
+      "id": "03aea058-7fdc-4e74-a8de-8416c38b1b7d",
+      "transaction_no": 8,
+      "type": "expense",
+      "title": "30 PRO 4/128 SILVER,BONUS BAWAAN",
+      "amount": 3439000,
+      "note": "Toko: mimimama16",
+      "date": "2026-11-25T08:40:50.015Z",
+      "photo": "assets/8.jpg",
+      "photo_rev": 1795596054217
     }
   ]
 }
