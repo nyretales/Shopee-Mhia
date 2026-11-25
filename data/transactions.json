@@ -66,6 +66,17 @@
       "date": "2026-11-25T08:39:36.666Z",
       "photo": "assets/6.jpg",
       "photo_rev": 1795595979774
+    },
+    {
+      "id": "1884122e-5570-4cf2-acec-b4a16d3b582d",
+      "transaction_no": 7,
+      "type": "expense",
+      "title": "Celana Pria Sam Celana Pria Chinos Panjang (+1 produk lain)",
+      "amount": 187560,
+      "note": "Toko: Sakinadenim9q.",
+      "date": "2026-11-25T08:40:08.345Z",
+      "photo": "assets/7.jpg",
+      "photo_rev": 1795596012131
     }
   ]
 }
