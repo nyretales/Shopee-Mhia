@@ -44,6 +44,17 @@
       "date": "2026-11-25T08:38:04.333Z",
       "photo": "assets/4.jpg",
       "photo_rev": 1795595887717
+    },
+    {
+      "id": "2587d997-76d7-4157-8a2a-7256ac3300bf",
+      "transaction_no": 5,
+      "type": "expense",
+      "title": "TOPI JEPANG ANAK / TANGGUNG POLOS",
+      "amount": 21400,
+      "note": "Toko: Topi Grosir",
+      "date": "2026-11-25T08:38:43.041Z",
+      "photo": "assets/5.jpg",
+      "photo_rev": 1795595926315
     }
   ]
 }
