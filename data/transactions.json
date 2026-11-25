@@ -1,16 +1,4 @@
 {
   "version": 1,
-  "transactions": [
-    {
-      "id": "40fbdb90-39ed-410b-9132-a69d3e7d28c9",
-      "transaction_no": 1,
-      "type": "expense",
-      "title": "Ecentio Official Shop",
-      "amount": 158784,
-      "note": "",
-      "date": "2026-11-25T08:09:19.161Z",
-      "photo": "assets/1.jpg",
-      "photo_rev": 1795594163391
-    }
-  ]
+  "transactions": []
 }
