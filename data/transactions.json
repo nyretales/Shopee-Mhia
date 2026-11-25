@@ -33,6 +33,17 @@
       "date": "2026-11-25T08:37:33.001Z",
       "photo": "assets/3.jpg",
       "photo_rev": 1795595856485
+    },
+    {
+      "id": "84570c35-e004-47a6-a8b7-c05f4823dd6b",
+      "transaction_no": 4,
+      "type": "expense",
+      "title": "YUMMY BOX BENTO BOX SEKAT 2 VOLUME 7",
+      "amount": 90731,
+      "note": "Toko: GIFT SHOP KELLY",
+      "date": "2026-11-25T08:38:04.333Z",
+      "photo": "assets/4.jpg",
+      "photo_rev": 1795595887717
     }
   ]
 }
