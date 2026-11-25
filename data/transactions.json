@@ -99,6 +99,17 @@
       "date": "2026-11-25T08:41:28.216Z",
       "photo": "assets/9.jpg",
       "photo_rev": 1795596091576
+    },
+    {
+      "id": "5aa6839e-c586-4494-a601-14634eada040",
+      "transaction_no": 10,
+      "type": "expense",
+      "title": "Robot M390 Bluetooth + Wireless Mouse Sile",
+      "amount": 148620,
+      "note": "Toko: Liem Group Official Store",
+      "date": "2026-11-25T08:41:56.069Z",
+      "photo": "assets/10.jpg",
+      "photo_rev": 1795596119568
     }
   ]
 }
