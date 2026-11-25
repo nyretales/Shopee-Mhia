@@ -1,4 +1,16 @@
 {
   "version": 1,
-  "transactions": []
+  "transactions": [
+    {
+      "id": "abfa3f1c-3244-4df1-b296-999a9658aa15",
+      "transaction_no": 1,
+      "type": "income",
+      "title": "Tambah Saldo via BCA",
+      "amount": 2500000,
+      "note": "",
+      "date": "2026-11-25T08:36:12.202Z",
+      "photo": "assets/1.jpg",
+      "photo_rev": 1795595775180
+    }
+  ]
 }
