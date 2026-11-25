@@ -4,7 +4,7 @@
  *  - data/transactions.json  : semua catatan transaksi
  *  - assets/<nomor>.jpg      : foto/screenshot transaksi
  *
- * Membaca (semua orang)  : fetch file statis dari GitHub Pages (atau raw.githubusercontent.com).
+ * Membaca (semua orang)  : fetch file statis dari situs itu sendiri (Vercel), cadangan raw.githubusercontent.com.
  * Menulis (hanya admin)  : GitHub Contents API memakai Personal Access Token.
  */
 (function (root, factory) {
@@ -31,9 +31,10 @@
 
     function friendlyError(status, apiMessage) {
         const msg = apiMessage ? ` (${apiMessage})` : '';
-        if (status === 401) return 'Token GitHub tidak valid atau sudah kedaluwarsa. Buat token baru lalu masuk lagi.';
-        if (status === 403) return 'GitHub menolak akses: pastikan token punya izin "Contents: Read and write" untuk repo ini, atau tunggu jika kena batas permintaan.' + msg;
-        if (status === 404) return 'Repo tidak ditemukan atau token tidak punya akses ke repo ini. Periksa pemilik & nama repo.';
+        if (status === 401) return 'Password salah atau sesi admin berakhir.';
+        if (status === 403) return 'Akses ditolak GitHub: pastikan token di server punya izin "Contents: Read and write" untuk repo ini, atau tunggu jika kena batas permintaan.' + msg;
+        if (status === 404) return 'Layanan admin atau repo tidak ditemukan. Pastikan aplikasi dibuka dari Vercel dan GITHUB_OWNER/GITHUB_REPO sudah benar.';
+        if (status === 500 || status === 502) return (apiMessage || 'Server bermasalah.');
         if (status === 409 || status === 422) return 'Data di GitHub baru saja berubah. Coba lagi.' + msg;
         return `GitHub error ${status}.` + msg;
     }
@@ -68,16 +69,22 @@
     /** Klien admin: butuh owner, repo, token. */
     function createStore(cfg) {
         const doFetch = cfg.fetchImpl || ((...a) => fetch(...a));
+        // Mode perantara (Vercel): cfg.endpoint = '/api/github', otorisasi lewat cfg.headers (password).
+        // Mode langsung (uji/opsional): langsung ke api.github.com memakai cfg.token.
         const base = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}`;
+        const urlFor = path => cfg.endpoint ? `${cfg.endpoint}?path=${encodeURIComponent(path)}` : base + path;
 
         async function gh(method, path, body) {
-            const res = await doFetch(base + path, {
+            const res = await doFetch(urlFor(path), {
                 method,
                 cache: 'no-store',
                 headers: {
-                    Authorization: 'Bearer ' + cfg.token,
-                    Accept: 'application/vnd.github+json',
-                    'X-GitHub-Api-Version': '2022-11-28',
+                    ...(cfg.endpoint ? {} : {
+                        Authorization: 'Bearer ' + cfg.token,
+                        Accept: 'application/vnd.github+json',
+                        'X-GitHub-Api-Version': '2022-11-28'
+                    }),
+                    ...(cfg.headers || {}),
                     ...(body ? { 'Content-Type': 'application/json' } : {})
                 },
                 body: body ? JSON.stringify(body) : undefined
