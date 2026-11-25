@@ -55,6 +55,17 @@
       "date": "2026-11-25T08:38:43.041Z",
       "photo": "assets/5.jpg",
       "photo_rev": 1795595926315
+    },
+    {
+      "id": "bfb5f7fc-9e40-4ac2-9d39-e880404cebef",
+      "transaction_no": 6,
+      "type": "expense",
+      "title": "Topi Mancing Anti UV Masker Jepang",
+      "amount": 26900,
+      "note": "Toko: SwanoCap",
+      "date": "2026-11-25T08:39:36.666Z",
+      "photo": "assets/6.jpg",
+      "photo_rev": 1795595979774
     }
   ]
 }
