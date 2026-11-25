@@ -10,6 +10,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="js/receipt-parser.js"></script>
+    <script src="js/github-store.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -35,6 +37,7 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .product-photo { width: 64px; height: 64px; object-fit: cover; border-radius: 14px; flex-shrink: 0; }
+        .autofilled { border-color: #EE4D2D !important; background-color: #FFF1EE !important; }
     </style>
 </head>
 <body class="text-slate-800 pb-24 md:pb-12">
@@ -48,7 +51,7 @@
             </div>
             <div class="flex items-center gap-2">
                 <!-- TOMBOL ADMIN / VIEWER MODE -->
-                <button type="button" onclick="toggleAdminMode()" id="adminBtn" class="bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm">
+                <button type="button" onclick="openAdminModal()" id="adminBtn" class="bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm">
                     <i data-lucide="shield" class="w-3.5 h-3.5"></i>
                     <span id="adminStatusText">Viewer Mode</span>
                 </button>
@@ -108,13 +111,18 @@
         <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100">
             <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
                 <h3 class="font-bold text-slate-700 text-base">Daftar Transaksi & Barang</h3>
-                <span id="transactionCount" class="text-xs font-semibold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">0 Item</span>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="reloadData()" id="reloadBtn" title="Muat ulang data dari GitHub" class="text-slate-400 hover:text-shopee-orange p-1.5 rounded-full hover:bg-orange-50 transition cursor-pointer">
+                        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    </button>
+                    <span id="transactionCount" class="text-xs font-semibold bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full">0 Item</span>
+                </div>
             </div>
 
             <div id="transactionList" class="space-y-3">
                 <div class="text-center py-12 text-slate-400">
                     <i data-lucide="loader" class="w-8 h-8 animate-spin mx-auto mb-2 text-shopee-orange"></i>
-                    <p class="text-sm">Memuat data lokal...</p>
+                    <p class="text-sm">Memuat data dari GitHub...</p>
                 </div>
             </div>
         </div>
@@ -181,13 +189,37 @@
 
             <form id="transactionForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
                 <input type="hidden" id="editingId" value="">
+
+                <!-- UPLOAD GAMBAR: nama produk & total otomatis terisi -->
+                <div class="rounded-2xl border border-orange-100 bg-orange-50 p-4">
+                    <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i data-lucide="scan-line" class="w-4 h-4 text-shopee-orange"></i> Foto / Screenshot</div>
+                    <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoSelected(event)">
+                    <div id="photoEmpty" class="mt-3">
+                        <button type="button" onclick="document.getElementById('photoInput').click()" class="w-full bg-white border-2 border-dashed border-orange-300 text-shopee-orange font-semibold text-sm py-4 rounded-2xl hover:bg-orange-50 transition cursor-pointer flex items-center justify-center gap-2">
+                            <i data-lucide="upload" class="w-4 h-4"></i> Pilih gambar
+                        </button>
+                        <p class="text-xs text-slate-600 mt-2 leading-relaxed">Upload screenshot pesanan Shopee atau bukti transfer. Nama produk dan total otomatis terisi, lalu foto disimpan ke GitHub.</p>
+                    </div>
+                    <div id="photoPreviewWrap" class="hidden mt-3 flex items-start gap-3">
+                        <img id="photoPreview" src="" alt="Pratinjau" class="w-20 h-20 rounded-xl object-cover bg-white border border-orange-100 flex-shrink-0">
+                        <div class="min-w-0 flex-1">
+                            <p id="photoStatus" class="text-xs text-slate-700 leading-relaxed"></p>
+                            <div id="photoProgress" class="hidden mt-2 h-1.5 bg-orange-100 rounded-full overflow-hidden"><div id="photoProgressBar" class="h-full bg-shopee-orange transition-all" style="width:0%"></div></div>
+                            <div class="mt-2 flex gap-3 text-xs font-semibold">
+                                <button type="button" onclick="document.getElementById('photoInput').click()" class="text-shopee-orange cursor-pointer">Ganti gambar</button>
+                                <button type="button" onclick="clearPendingPhoto()" class="text-slate-500 cursor-pointer">Hapus</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Tipe Transaksi</label>
                     <div class="grid grid-cols-2 gap-3">
-                        <button type="button" id="typeExpenseBtn" onclick="setFormType('expense')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer">
+                        <button type="button" id="typeExpenseBtn" onclick="chooseType('expense')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-shopee-orange bg-orange-50 text-shopee-orange transition flex items-center justify-center gap-2 cursor-pointer">
                             <i data-lucide="shopping-bag" class="w-4 h-4"></i> Beli Barang
                         </button>
-                        <button type="button" id="typeIncomeBtn" onclick="setFormType('income')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer">
+                        <button type="button" id="typeIncomeBtn" onclick="chooseType('income')" class="py-3 px-4 rounded-2xl font-semibold text-sm border-2 border-slate-200 text-slate-500 transition flex items-center justify-center gap-2 cursor-pointer">
                             <i data-lucide="arrow-down-left" class="w-4 h-4"></i> Tambah Saldo
                         </button>
                     </div>
@@ -196,23 +228,17 @@
 
                 <div>
                     <label id="labelTitle" class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nama Barang / Keterangan</label>
-                    <input type="text" id="inputTitle" required placeholder="Contoh: Gamis Anak / Tambahan Dana" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    <input type="text" id="inputTitle" required oninput="markDirty('title')" placeholder="Contoh: Gamis Anak / Tambahan Dana" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nominal (Rp)</label>
-                    <input type="number" id="inputAmount" required placeholder="Contoh: 125000" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    <input type="number" id="inputAmount" required min="1" inputmode="numeric" oninput="markDirty('amount')" placeholder="Contoh: 125000" class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
                 </div>
 
                 <div>
                     <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Catatan Tambahan (Opsional)</label>
-                    <textarea id="inputNote" rows="2" placeholder="Link Shopee atau catatan warna/ukuran..." class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange"></textarea>
-                </div>
-
-                <div class="rounded-2xl border border-orange-100 bg-orange-50 p-4">
-                    <div class="flex items-center gap-2 text-sm font-bold text-slate-700"><i data-lucide="image" class="w-4 h-4 text-shopee-orange"></i> Foto Produk (Manual)</div>
-                    <p class="text-xs text-slate-600 mt-2 leading-relaxed">Setelah transaksi disimpan, letakkan foto secara manual di folder <b>assets/</b> dengan nama sesuai nomor transaksi saja, misalnya <b>1.jpg</b>, <b>2.jpg</b>, dan seterusnya. Format yang didukung: JPG, JPEG, PNG, atau WebP.</p>
-                    <p class="text-xs text-slate-500 mt-1">Nomor transaksi dibuat otomatis dan tidak berubah saat transaksi diedit.</p>
+                    <textarea id="inputNote" rows="2" oninput="markDirty('note')" placeholder="Link Shopee atau catatan warna/ukuran..." class="w-full bg-slate-50 px-4 py-3 rounded-2xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange"></textarea>
                 </div>
 
                 <div class="pt-3">
@@ -224,96 +250,293 @@
         </div>
     </div>
 
+    <!-- MODAL ADMIN: LOGIN DENGAN TOKEN GITHUB -->
+    <div id="adminModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-slate-800">Admin &amp; Penyimpanan GitHub</h3>
+                <button type="button" onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed mb-4">Semua catatan disimpan di repositori GitHub (<b>data/transactions.json</b>) dan foto di folder <b>assets/</b>. Untuk menambah/mengubah catatan, masukkan <b>token GitHub</b>. Token hanya disimpan di perangkat ini.</p>
+            <form onsubmit="submitAdminLogin(event)" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Pemilik repo</label>
+                        <input type="text" id="cfgOwner" autocomplete="off" placeholder="username" class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nama repo</label>
+                        <input type="text" id="cfgRepo" autocomplete="off" placeholder="Shopee-Mhia" class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Token GitHub</label>
+                    <input type="password" id="cfgToken" autocomplete="off" placeholder="github_pat_..." class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">Buat di <a class="text-shopee-orange underline" target="_blank" rel="noopener" href="https://github.com/settings/personal-access-tokens/new">GitHub &rarr; Fine-grained token</a>, pilih hanya repo ini, izin <b>Contents: Read and write</b>.</p>
+                </div>
+                <p id="adminError" class="hidden text-xs text-rose-600 bg-rose-50 rounded-xl px-3 py-2"></p>
+                <button id="adminLoginBtn" type="submit" class="w-full bg-shopee-orange hover:bg-shopee-dark text-white font-semibold py-3 rounded-2xl shadow-lg shadow-orange-500/20 transition cursor-pointer">Masuk sebagai Admin</button>
+            </form>
+            <button id="adminLogoutBtn" type="button" onclick="adminLogout()" class="hidden w-full mt-3 border border-slate-200 text-slate-600 font-semibold py-3 rounded-2xl hover:bg-slate-50 transition cursor-pointer">Keluar &amp; hapus token dari perangkat ini</button>
+            <div id="legacyImportBox" class="hidden mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <p class="text-xs text-emerald-800 leading-relaxed">Ditemukan <b id="legacyCount">0</b> catatan lama di browser ini (versi sebelumnya). Pindahkan ke GitHub agar bisa dilihat di semua perangkat.</p>
+                <button id="legacyImportBtn" type="button" onclick="importLegacyRecords()" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm py-2.5 rounded-xl cursor-pointer">Pindahkan ke GitHub</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-sm font-medium z-50 transition-all duration-300 opacity-0 pointer-events-none translate-y-4">
         Notifikasi pesan di sini
     </div>
 
-    <!-- SCRIPT UTAMA: PENYIMPANAN LOKAL -->
+    <!-- SCRIPT UTAMA: DATA DI REPOSITORI GITHUB -->
     <script>
         /*
-         * Data transaksi disimpan di IndexedDB lokal browser/perangkat ini.
-         * Foto transaksi ditambahkan manual ke folder assets/ dengan nama nomor transaksi,
-         * contoh: assets/1.jpg, assets/2.jpg, assets/3.jpg.
+         * Alur data (tanpa Supabase / database / server):
+         *  - Semua orang  : membaca data/transactions.json dari repo (GitHub Pages).
+         *  - Admin        : menulis data/transactions.json dan assets/<nomor>.jpg langsung ke repo
+         *                   lewat GitHub API memakai token (disimpan hanya di perangkat admin).
+         *  - Upload gambar: dibaca OCR di browser -> nama produk & total terisi otomatis.
          */
-        const DB_NAME = 'ShopeeMhiaLocalDB';
-        const DB_VERSION = 1;
-        const STORE_NAME = 'transactions';
 
-        let db = null;
+        // Isi hanya jika aplikasi dibuka lewat domain sendiri (bukan *.github.io).
+        const DEFAULT_REPO = { owner: '', repo: '' };
+
+        const CFG_KEY = 'shopeeMhiaGitHub';
+        const LEGACY_DB = 'ShopeeMhiaLocalDB';
+        const LEGACY_STORE = 'transactions';
+        const LEGACY_FLAG = 'shopeeMhiaLegacyImported';
+        const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+        const PLACEHOLDER = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" rx="14" fill="#F1F5F9"/><path d="M20 26h24l-2 18H22z" fill="none" stroke="#CBD5E1" stroke-width="3" stroke-linejoin="round"/><path d="M26 26v-3a6 6 0 0 1 12 0v3" fill="none" stroke="#CBD5E1" stroke-width="3"/></svg>');
+
         let transactions = [];
         let isAdmin = false;
+        let store = null;
+        let cfg = loadConfig();
+        let pendingPhoto = null;          // { blob, previewUrl } foto yang akan diunggah
+        let scanSeq = 0;                  // membatalkan hasil OCR yang sudah usang
+        let ocrRunning = false;
+        let formDirty = { type: false, title: false, amount: false, note: false };
+        const photoCache = {};            // id -> blob URL (agar foto langsung tampil di perangkat admin)
 
+        /* ---------- Konfigurasi (localStorage, aman bila diblokir) ---------- */
+        function loadConfig() {
+            try {
+                const c = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
+                return { owner: c.owner || '', repo: c.repo || '', token: c.token || '' };
+            } catch (_) { return { owner: '', repo: '', token: '' }; }
+        }
+        function saveConfig() {
+            try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (_) { /* abaikan */ }
+        }
+        function repoGuess() {
+            if (cfg.owner && cfg.repo) return { owner: cfg.owner, repo: cfg.repo };
+            const h = location.hostname;
+            if (h.endsWith('.github.io')) {
+                const owner = h.split('.')[0];
+                const repo = location.pathname.split('/').filter(Boolean)[0] || (owner + '.github.io');
+                return { owner, repo };
+            }
+            return DEFAULT_REPO.owner && DEFAULT_REPO.repo ? { ...DEFAULT_REPO } : { owner: '', repo: '' };
+        }
+
+        /* ---------- Mulai ---------- */
         document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
-            try {
-                await openLocalDatabase();
-                await fetchTransactions();
-            } catch (error) {
-                console.error('Gagal membuka penyimpanan lokal:', error);
-                showToast('Penyimpanan lokal tidak dapat dibuka di browser ini.');
-                document.getElementById('transactionList').innerHTML =
-                    '<p class="text-center py-8 text-rose-500 text-sm">Penyimpanan lokal tidak tersedia. Coba buka aplikasi melalui browser modern.</p>';
-            }
+            updateAdminButton();
+            if (cfg.token && cfg.owner && cfg.repo) await enterAdmin(true);
+            else await loadData();
         });
 
-        function openLocalDatabase() {
-            return new Promise((resolve, reject) => {
-                if (!('indexedDB' in window)) {
-                    reject(new Error('Browser tidak mendukung IndexedDB.'));
-                    return;
-                }
-                const request = indexedDB.open(DB_NAME, DB_VERSION);
-                request.onupgradeneeded = event => {
-                    const database = event.target.result;
-                    if (!database.objectStoreNames.contains(STORE_NAME)) {
-                        const store = database.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                        store.createIndex('date', 'date', { unique: false });
-                    }
-                };
-                request.onsuccess = () => {
-                    db = request.result;
-                    db.onversionchange = () => db.close();
-                    resolve(db);
-                };
-                request.onerror = () => reject(request.error || new Error('Database lokal gagal dibuka.'));
-            });
+        function setTransactions(list) {
+            const copy = (list || []).map(t => ({ ...t }));
+            let maxNo = copy.reduce((m, t) => Math.max(m, Number(t.transaction_no) || 0), 0);
+            copy.forEach(t => { if (!t.transaction_no) t.transaction_no = ++maxNo; });
+            copy.sort((a, b) => (new Date(b.date) - new Date(a.date)) || (b.transaction_no - a.transaction_no));
+            transactions = copy;
         }
 
-        function dbRequest(mode, action, value) {
-            return new Promise((resolve, reject) => {
-                if (!db) return reject(new Error('Database lokal belum siap.'));
-                const tx = db.transaction(STORE_NAME, mode);
-                const store = tx.objectStore(STORE_NAME);
-                const request = action === 'getAll' ? store.getAll()
-                    : action === 'put' ? store.put(value)
-                    : store.delete(value);
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error || new Error('Operasi penyimpanan gagal.'));
-                tx.onabort = () => reject(tx.error || new Error('Transaksi penyimpanan dibatalkan.'));
-            });
-        }
-
-        async function fetchTransactions() {
+        async function loadData() {
             try {
-                transactions = await dbRequest('readonly', 'getAll');
-                transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
-                // Beri nomor berurutan pada transaksi lama yang belum memiliki nomor.
-                let maxNo = transactions.reduce((max, t) => Math.max(max, Number(t.transaction_no) || 0), 0);
-                for (const t of transactions) {
-                    if (!t.transaction_no) {
-                        t.transaction_no = ++maxNo;
-                        await dbRequest('readwrite', 'put', t);
-                    }
+                if (isAdmin && store) {
+                    const { data } = await store.readData();
+                    setTransactions(data.transactions);
+                } else {
+                    const data = await GitHubStore.loadPublic(repoGuess());
+                    setTransactions(data.transactions);
                 }
-                transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
                 renderDashboard();
-            } catch (err) {
-                console.error('Gagal memuat data lokal:', err);
-                showToast('Gagal memuat catatan dari penyimpanan perangkat.');
+            } catch (error) {
+                console.error('Gagal memuat data:', error);
+                document.getElementById('transactionList').innerHTML =
+                    '<p class="text-center py-8 text-rose-500 text-sm px-4">Data tidak dapat dimuat dari GitHub. Buka aplikasi lewat alamat GitHub Pages (bukan membuka file langsung), lalu tekan tombol muat ulang.</p>';
+                showToast('Gagal memuat data dari GitHub.');
             }
         }
 
+        async function reloadData() {
+            const icon = document.querySelector('#reloadBtn svg, #reloadBtn i');
+            if (icon) icon.classList.add('animate-spin');
+            await loadData();
+            if (icon) icon.classList.remove('animate-spin');
+            showToast('Data dimuat ulang.');
+        }
+
+        /* ---------- Admin (token GitHub) ---------- */
+        function updateAdminButton() {
+            const btn = document.getElementById('adminBtn');
+            document.getElementById('adminStatusText').innerText = isAdmin ? 'Admin Active' : 'Viewer Mode';
+            btn.className = isAdmin
+                ? 'bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm'
+                : 'bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
+        }
+
+        async function enterAdmin(silent) {
+            const candidate = GitHubStore.createStore({ owner: cfg.owner, repo: cfg.repo, token: cfg.token });
+            try {
+                await candidate.verify();
+            } catch (e) {
+                if (!silent) throw e;
+                if (e.status === 401) { cfg.token = ''; saveConfig(); }
+                showToast('Mode admin tidak aktif: ' + (e.status ? e.message : 'tidak dapat terhubung ke GitHub.'));
+                await loadData();
+                return false;
+            }
+            store = candidate;
+            isAdmin = true;
+            updateAdminButton();
+            await loadData();
+            if (!silent) showToast('Berhasil masuk sebagai Admin!');
+            return true;
+        }
+
+        async function openAdminModal() {
+            const guess = repoGuess();
+            document.getElementById('cfgOwner').value = cfg.owner || guess.owner;
+            document.getElementById('cfgRepo').value = cfg.repo || guess.repo;
+            document.getElementById('cfgToken').value = '';
+            document.getElementById('cfgToken').placeholder = isAdmin ? '(token tersimpan)' : 'github_pat_...';
+            document.getElementById('adminError').classList.add('hidden');
+            document.getElementById('adminLogoutBtn').classList.toggle('hidden', !isAdmin);
+            document.getElementById('adminLoginBtn').innerText = isAdmin ? 'Simpan Perubahan' : 'Masuk sebagai Admin';
+            document.getElementById('legacyImportBox').classList.add('hidden');
+            document.getElementById('adminModal').classList.remove('hidden');
+            lucide.createIcons();
+            if (isAdmin) refreshLegacyBox();
+        }
+
+        function closeAdminModal() {
+            document.getElementById('adminModal').classList.add('hidden');
+        }
+
+        async function submitAdminLogin(event) {
+            event.preventDefault();
+            const owner = document.getElementById('cfgOwner').value.trim();
+            const repo = document.getElementById('cfgRepo').value.trim();
+            const token = document.getElementById('cfgToken').value.trim() || (isAdmin ? cfg.token : '');
+            const errBox = document.getElementById('adminError');
+            const btn = document.getElementById('adminLoginBtn');
+            const showError = msg => { errBox.textContent = msg; errBox.classList.remove('hidden'); };
+            errBox.classList.add('hidden');
+            if (!owner || !repo || !token) return showError('Pemilik repo, nama repo, dan token wajib diisi.');
+            const previous = { ...cfg };
+            const label = btn.innerText;
+            btn.disabled = true;
+            btn.innerText = 'Memeriksa token...';
+            cfg = { owner, repo, token };
+            try {
+                await enterAdmin(false);
+                saveConfig();
+                closeAdminModal();
+            } catch (e) {
+                cfg = previous;
+                showError(e.message || 'Gagal masuk.');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = label;
+            }
+        }
+
+        async function adminLogout() {
+            isAdmin = false;
+            store = null;
+            cfg.token = '';
+            saveConfig();
+            updateAdminButton();
+            renderDashboard();            // sembunyikan tombol edit/hapus seketika
+            closeAdminModal();
+            showToast('Keluar dari Mode Admin. Token dihapus dari perangkat ini.');
+            await loadData();
+        }
+
+        /* ---------- Impor catatan lama dari IndexedDB browser (versi sebelumnya) ---------- */
+        function readLegacyLocal() {
+            return new Promise(resolve => {
+                if (!window.indexedDB) return resolve([]);
+                let created = false;
+                const req = indexedDB.open(LEGACY_DB);
+                req.onupgradeneeded = () => { created = true; };
+                req.onerror = () => resolve([]);
+                req.onsuccess = () => {
+                    const d = req.result;
+                    if (created || !d.objectStoreNames.contains(LEGACY_STORE)) {
+                        d.close();
+                        if (created) indexedDB.deleteDatabase(LEGACY_DB);
+                        return resolve([]);
+                    }
+                    const get = d.transaction(LEGACY_STORE, 'readonly').objectStore(LEGACY_STORE).getAll();
+                    get.onsuccess = () => { d.close(); resolve(get.result || []); };
+                    get.onerror = () => { d.close(); resolve([]); };
+                };
+            });
+        }
+
+        async function refreshLegacyBox() {
+            let flagged = false;
+            try { flagged = localStorage.getItem(LEGACY_FLAG) === '1'; } catch (_) { /* abaikan */ }
+            if (flagged || transactions.length > 0) return;
+            const legacy = await readLegacyLocal();
+            if (!legacy.length) return;
+            document.getElementById('legacyCount').textContent = legacy.length;
+            document.getElementById('legacyImportBox').classList.remove('hidden');
+        }
+
+        async function importLegacyRecords() {
+            const btn = document.getElementById('legacyImportBtn');
+            btn.disabled = true;
+            btn.innerText = 'Memindahkan...';
+            try {
+                const legacy = await readLegacyLocal();
+                legacy.sort((a, b) => new Date(a.date) - new Date(b.date));
+                const { data } = await store.updateData(d => {
+                    const ids = new Set(d.transactions.map(t => t.id));
+                    const used = new Set(d.transactions.map(t => Number(t.transaction_no)));
+                    let maxNo = d.transactions.reduce((m, t) => Math.max(m, Number(t.transaction_no) || 0), 0);
+                    legacy.forEach(t => {
+                        if (ids.has(t.id)) return;
+                        let no = Number(t.transaction_no);
+                        if (!no || used.has(no)) no = ++maxNo;
+                        used.add(no);
+                        maxNo = Math.max(maxNo, no);
+                        d.transactions.push({ id: t.id, transaction_no: no, type: t.type, title: t.title, amount: Number(t.amount), note: t.note || '', date: t.date });
+                    });
+                }, 'Impor catatan lama dari browser');
+                try { localStorage.setItem(LEGACY_FLAG, '1'); } catch (_) { /* abaikan */ }
+                setTransactions(data.transactions);
+                renderDashboard();
+                document.getElementById('legacyImportBox').classList.add('hidden');
+                showToast(`${legacy.length} catatan lama dipindahkan ke GitHub.`);
+            } catch (e) {
+                console.error(e);
+                alert('Gagal memindahkan catatan lama.\n\n' + (e.message || ''));
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'Pindahkan ke GitHub';
+            }
+        }
+
+        /* ---------- Tampilan daftar ---------- */
         function renderDashboard() {
             let totalIncome = 0;
             let totalExpense = 0;
@@ -326,6 +549,27 @@
             document.getElementById('totalIncome').innerText = formatRupiah(totalIncome);
             document.getElementById('totalExpense').innerText = formatRupiah(totalExpense);
             filterTransactions();
+        }
+
+        function photoSrc(t) {
+            if (photoCache[t.id]) return photoCache[t.id];
+            if (t.photo) return t.photo + (t.photo_rev ? '?v=' + t.photo_rev : '');
+            return `assets/${Number(t.transaction_no)}.jpg`;   // foto lama: nomor.jpg/.jpeg/.png/.webp
+        }
+        function hasFixedPhoto(t) { return !!(photoCache[t.id] || t.photo); }
+
+        function photoFailed(img, onAllFailed) {
+            const fail = () => {
+                if (typeof onAllFailed === 'function') return onAllFailed();
+                img.onerror = null;
+                img.src = PLACEHOLDER;
+            };
+            if (img.dataset.fixed === '1') return fail();
+            const extensions = ['jpg', 'jpeg', 'png', 'webp'];
+            const next = Number(img.dataset.ext || 0) + 1;
+            if (next >= extensions.length) return fail();
+            img.dataset.ext = String(next);
+            img.src = `assets/${img.dataset.tno}.${extensions[next]}`;
         }
 
         function filterTransactions() {
@@ -349,20 +593,21 @@
             }
             container.innerHTML = filtered.map(t => {
                 const isIncome = t.type === 'income';
+                const id = escapeHtml(t.id);
                 return `
-                    <div role="button" tabindex="0" onclick="openTransactionDetail('${t.id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTransactionDetail('${t.id}')}" class="flex items-center justify-between gap-2 p-4 rounded-2xl bg-slate-50 hover:bg-orange-50 transition border border-slate-100 cursor-pointer">
+                    <div role="button" tabindex="0" onclick="openTransactionDetail('${id}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openTransactionDetail('${id}')}" class="flex items-center justify-between gap-2 p-4 rounded-2xl bg-slate-50 hover:bg-orange-50 transition border border-slate-100 cursor-pointer">
                         <div class="flex items-center gap-3 min-w-0">
-                            ${`<img src="${escapeHtml(transactionPhotoPath(t))}" onerror="tryNextTransactionPhoto(this)" alt="Foto ${escapeHtml(t.title)}" class="product-photo" data-transaction-no="${Number(t.transaction_no)}" loading="lazy">`}
+                            <img src="${escapeHtml(photoSrc(t))}" onerror="photoFailed(this)" alt="Foto ${escapeHtml(t.title)}" class="product-photo" data-tno="${Number(t.transaction_no)}" data-fixed="${hasFixedPhoto(t) ? 1 : 0}" loading="lazy">
                             <div class="min-w-0">
                                 <h4 class="font-bold text-slate-800 text-sm md:text-base">${escapeHtml(t.title)}</h4>
-                                <p class="text-xs text-slate-400 mt-0.5">No. ${Number(t.transaction_no)} • ${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(t.note) : ''}</p>
+                                <p class="text-xs text-slate-400 mt-0.5">No. ${Number(t.transaction_no)} • ${formatDate(t.date)} ${t.note ? '• ' + escapeHtml(firstLine(t.note)) : ''}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
                             <span class="font-extrabold text-sm md:text-base ${isIncome ? 'text-emerald-600' : 'text-slate-800'}">${isIncome ? '+' : '-'} ${formatRupiah(t.amount)}</span>
                             ${isAdmin ? `
-                                <button type="button" onclick="event.stopPropagation();editTransaction('${t.id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
-                                <button type="button" onclick="event.stopPropagation();deleteTransaction('${t.id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                                <button type="button" onclick="event.stopPropagation();editTransaction('${id}')" class="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Edit"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                                <button type="button" onclick="event.stopPropagation();deleteTransaction('${id}')" class="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-white transition cursor-pointer" title="Hapus"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
                         </div>
                     </div>`;
             }).join('');
@@ -392,15 +637,16 @@
             const photoWrap = document.getElementById('detailPhotoWrap');
             const noPhoto = document.getElementById('detailNoPhoto');
             const photo = document.getElementById('detailPhoto');
-            photo.dataset.extensionIndex = '0';
-            photo.dataset.transactionNo = String(Number(t.transaction_no));
+            photo.dataset.ext = '0';
+            photo.dataset.tno = String(Number(t.transaction_no));
+            photo.dataset.fixed = hasFixedPhoto(t) ? '1' : '0';
             photo.onerror = function () {
-                tryNextTransactionPhoto(this, () => {
+                photoFailed(this, () => {
                     photoWrap.classList.add('hidden');
                     noPhoto.classList.remove('hidden');
                 });
             };
-            photo.src = transactionPhotoPath(t);
+            photo.src = photoSrc(t);
             photo.alt = 'Foto produk: ' + (t.title || '');
             photoWrap.classList.remove('hidden');
             noPhoto.classList.add('hidden');
@@ -413,39 +659,25 @@
             document.getElementById('transactionDetailPage').classList.add('hidden');
         }
 
-        function toggleAdminMode() {
-            if (!isAdmin) {
-                const pin = prompt('Masukkan PIN Admin:');
-                if (pin === 'allen') {
-                    isAdmin = true;
-                    document.getElementById('adminStatusText').innerText = 'Admin Active';
-                    document.getElementById('adminBtn').className = 'bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
-                    showToast('Berhasil masuk sebagai Admin!');
-                    renderDashboard();
-                } else if (pin !== null) showToast('PIN Salah!');
-            } else {
-                isAdmin = false;
-                document.getElementById('adminStatusText').innerText = 'Viewer Mode';
-                document.getElementById('adminBtn').className = 'bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
-                showToast('Keluar dari Mode Admin.');
-                renderDashboard();
-            }
-        }
-
+        /* ---------- Form catat transaksi ---------- */
         function openAddModal() {
             if (!isAdmin) {
-                alert("Akses ditolak! Klik tombol 'Viewer Mode' di pojok kanan atas lalu masukkan PIN Admin untuk mulai mencatat.");
+                showToast('Masuk sebagai Admin dulu untuk mulai mencatat.');
+                openAdminModal();
                 return;
             }
             resetTransactionForm();
             document.getElementById('modalTitle').innerText = 'Catat Transaksi Baru';
-            document.getElementById('submitTransactionBtn').innerText = 'Simpan Catatan';
+            updateSubmitLabel();
             document.getElementById('transactionModal').classList.remove('hidden');
         }
 
         function resetTransactionForm() {
             document.getElementById('transactionForm').reset();
             document.getElementById('editingId').value = '';
+            formDirty = { type: false, title: false, amount: false, note: false };
+            ['inputTitle', 'inputAmount', 'inputNote'].forEach(id => document.getElementById(id).classList.remove('autofilled'));
+            clearPendingPhoto();
             setFormType('expense');
         }
 
@@ -464,9 +696,25 @@
             document.getElementById('inputAmount').value = t.amount || '';
             document.getElementById('inputNote').value = t.note || '';
             setFormType(t.type || 'expense');
+            formDirty = { type: true, title: true, amount: true, note: true };   // jangan timpa data yang sudah ada
             document.getElementById('modalTitle').innerText = 'Edit Catatan Transaksi';
-            document.getElementById('submitTransactionBtn').innerText = 'Simpan Perubahan';
+            updateSubmitLabel();
             document.getElementById('transactionModal').classList.remove('hidden');
+        }
+
+        function updateSubmitLabel() {
+            const btn = document.getElementById('submitTransactionBtn');
+            const editing = !!document.getElementById('editingId').value;
+            btn.innerText = ocrRunning ? 'Membaca gambar...' : (editing ? 'Simpan Perubahan' : 'Simpan Catatan');
+            btn.disabled = ocrRunning;
+        }
+
+        function chooseType(type) { formDirty.type = true; setFormType(type); }
+
+        function markDirty(field) {
+            formDirty[field] = true;
+            const el = document.getElementById({ title: 'inputTitle', amount: 'inputAmount', note: 'inputNote' }[field]);
+            if (el) el.classList.remove('autofilled');
         }
 
         function setFormType(type) {
@@ -485,49 +733,265 @@
             }
         }
 
+        /* ---------- Upload gambar + OCR otomatis ---------- */
+        async function decodeImage(file) {
+            if (window.createImageBitmap) {
+                try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) { /* coba cara lain */ }
+            }
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+                img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Gambar tidak dapat dibaca.')); };
+                img.src = url;
+            });
+        }
+        function drawScaled(img, targetW) {
+            const w = img.width || img.naturalWidth;
+            const h = img.height || img.naturalHeight;
+            const scale = targetW / w;
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(w * scale));
+            canvas.height = Math.max(1, Math.round(h * scale));
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            return canvas;
+        }
+        const canvasToBlob = (canvas, q) => new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', q));
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const r = new FileReader();
+                r.onload = () => resolve(String(r.result).split(',')[1]);
+                r.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+                r.readAsDataURL(blob);
+            });
+        }
+
+        function loadTesseract() {
+            if (window.Tesseract) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = TESSERACT_URL;
+                s.onload = resolve;
+                s.onerror = () => reject(new Error('Pustaka pembaca teks (OCR) tidak dapat dimuat. Periksa koneksi internet.'));
+                document.head.appendChild(s);
+            });
+        }
+
+        let ocrWorkerPromise = null;
+        let ocrProgress = () => {};
+        async function getOcrWorker() {
+            await loadTesseract();
+            if (!ocrWorkerPromise) {
+                ocrWorkerPromise = (async () => {
+                    const worker = await Tesseract.createWorker('eng', 1, {
+                        logger: m => { if (m.status === 'recognizing text') ocrProgress(m.progress); }
+                    });
+                    await worker.setParameters({ tessedit_pageseg_mode: '6' });   // satu blok teks
+                    return worker;
+                })().catch(e => { ocrWorkerPromise = null; throw e; });
+            }
+            return ocrWorkerPromise;
+        }
+
+        function normalizeOcrData(data) {
+            let lines = data.lines;
+            if (!lines || !lines.length) {
+                lines = [];
+                (data.blocks || []).forEach(b => (b.paragraphs || []).forEach(p => (p.lines || []).forEach(l => lines.push(l))));
+            }
+            return {
+                text: data.text || '',
+                lines: lines.map(l => ({
+                    text: l.text || (l.words || []).map(w => w.text).join(' '),
+                    words: (l.words || []).map(w => ({ text: w.text, confidence: w.confidence }))
+                }))
+            };
+        }
+
+        async function runOcr(canvas, onProgress) {
+            const worker = await getOcrWorker();
+            ocrProgress = onProgress;
+            const { data } = await worker.recognize(canvas);
+            return normalizeOcrData(data);
+        }
+
+        function setPhotoStatus(text, progress) {
+            document.getElementById('photoStatus').textContent = text;
+            const wrap = document.getElementById('photoProgress');
+            wrap.classList.toggle('hidden', progress == null);
+            if (progress != null) document.getElementById('photoProgressBar').style.width = Math.round(progress * 100) + '%';
+        }
+
+        function showPhotoPreview(url) {
+            document.getElementById('photoPreview').src = url;
+            document.getElementById('photoEmpty').classList.add('hidden');
+            document.getElementById('photoPreviewWrap').classList.remove('hidden');
+        }
+
+        function clearPendingPhoto() {
+            scanSeq++;
+            if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+            pendingPhoto = null;
+            ocrRunning = false;
+            document.getElementById('photoPreviewWrap').classList.add('hidden');
+            document.getElementById('photoEmpty').classList.remove('hidden');
+            document.getElementById('photoProgress').classList.add('hidden');
+            updateSubmitLabel();
+        }
+
+        async function handlePhotoSelected(event) {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            if (!/^image\//.test(file.type)) return showToast('File harus berupa gambar (JPG, PNG, atau WebP).');
+            const mySeq = ++scanSeq;
+            ocrRunning = true;
+            updateSubmitLabel();
+            try {
+                setPhotoStatus('Menyiapkan gambar...', null);
+                document.getElementById('photoPreviewWrap').classList.remove('hidden');
+                document.getElementById('photoEmpty').classList.add('hidden');
+                const img = await decodeImage(file);
+                const w = img.width || img.naturalWidth;
+                const blob = await canvasToBlob(drawScaled(img, Math.min(w, 1280)), 0.82);
+                if (mySeq !== scanSeq) return;
+                if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.previewUrl);
+                pendingPhoto = { blob, previewUrl: URL.createObjectURL(blob) };
+                showPhotoPreview(pendingPhoto.previewUrl);
+
+                setPhotoStatus('Membaca nama produk & total dari gambar... 0%', 0);
+                try {
+                    const ocrW = w < 900 ? 1200 : Math.min(w, 2200);
+                    const ocr = await runOcr(drawScaled(img, ocrW), p => {
+                        if (mySeq === scanSeq) setPhotoStatus(`Membaca nama produk & total dari gambar... ${Math.round(p * 100)}%`, p);
+                    });
+                    if (mySeq !== scanSeq) return;
+                    applyOcrResult(ReceiptParser.parse(ocr));
+                } catch (ocrError) {
+                    console.error('OCR gagal:', ocrError);
+                    if (mySeq === scanSeq) setPhotoStatus('Foto siap diunggah, tetapi teks tidak terbaca otomatis (' + (ocrError.message || 'OCR gagal') + '). Isi nama dan nominal secara manual.', null);
+                }
+            } catch (e) {
+                console.error(e);
+                if (mySeq === scanSeq) {
+                    clearPendingPhoto();
+                    showToast(e.message || 'Gambar tidak dapat diproses.');
+                }
+            } finally {
+                if (mySeq === scanSeq) {
+                    ocrRunning = false;
+                    document.getElementById('photoProgress').classList.add('hidden');
+                    updateSubmitLabel();
+                }
+            }
+        }
+
+        function fillAuto(inputId, field, value) {
+            if (formDirty[field] || !value) return false;
+            const el = document.getElementById(inputId);
+            el.value = value;
+            el.classList.add('autofilled');
+            return true;
+        }
+
+        function applyOcrResult(r) {
+            if (!r.recognized && !r.title && !r.amount) {
+                setPhotoStatus('Gambar tersimpan, tetapi isinya tidak dikenali sebagai pesanan Shopee atau bukti transfer. Isi secara manual.', null);
+                return;
+            }
+            if (!formDirty.type && r.type) setFormType(r.type);
+            const gotTitle = fillAuto('inputTitle', 'title', r.title);
+            const gotAmount = fillAuto('inputAmount', 'amount', r.amount);
+            fillAuto('inputNote', 'note', r.note);
+            const parts = [];
+            if (gotTitle) parts.push(r.title);
+            if (gotAmount) parts.push(formatRupiah(r.amount) + (r.guessedAmount ? ' (perkiraan)' : ''));
+            let msg = parts.length ? 'Terbaca otomatis: ' + parts.join(' • ') + '. Periksa kembali sebelum menyimpan.' : 'Gambar dibaca, tidak ada kolom yang diubah.';
+            if (!r.amount && !formDirty.amount) msg += ' Total tidak terbaca, isi nominal secara manual.';
+            if (!r.title && r.type === 'expense' && !formDirty.title) msg += ' Nama produk tidak terbaca, isi secara manual.';
+            setPhotoStatus(msg, null);
+        }
+
+        /* ---------- Simpan / hapus (ke GitHub) ---------- */
         async function handleFormSubmit(event) {
             event.preventDefault();
-            if (!isAdmin) return showToast('Akses ditolak. Masuk sebagai Admin terlebih dahulu.');
+            if (!isAdmin || !store) return showToast('Akses ditolak. Masuk sebagai Admin terlebih dahulu.');
+            if (ocrRunning) return;
             const submitBtn = document.getElementById('submitTransactionBtn');
             submitBtn.disabled = true;
-            submitBtn.innerText = 'Menyimpan...';
+            submitBtn.innerText = 'Menyimpan ke GitHub...';
             try {
                 const type = document.getElementById('formType').value;
                 const title = document.getElementById('inputTitle').value.trim();
-                const amount = Number(document.getElementById('inputAmount').value);
+                const amount = Math.round(Number(document.getElementById('inputAmount').value));
                 const note = document.getElementById('inputNote').value.trim();
                 const editingId = document.getElementById('editingId').value;
                 if (!title || !Number.isFinite(amount) || amount <= 0) throw new Error('Nama/keterangan dan nominal harus diisi dengan benar.');
-                const old = editingId ? transactions.find(t => t.id === editingId) : null;
-                const nextNo = old ? old.transaction_no : (transactions.reduce((max, t) => Math.max(max, Number(t.transaction_no) || 0), 0) + 1);
-                const payload = {
-                    id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-                    transaction_no: nextNo,
-                    type, title, amount, note,
-                    date: old ? old.date : new Date().toISOString()
-                };
-                await dbRequest('readwrite', 'put', payload);
-                showToast(editingId ? 'Catatan berhasil diperbarui!' : 'Catatan berhasil disimpan!');
+                const photoToUpload = pendingPhoto;
+
+                const { data, result } = await store.updateData(async d => {
+                    const list = d.transactions;
+                    const idx = editingId ? list.findIndex(t => t.id === editingId) : -1;
+                    if (editingId && idx < 0) throw new Error('Catatan tidak ditemukan di GitHub (mungkin sudah dihapus).');
+                    const old = idx >= 0 ? list[idx] : null;
+                    const no = old ? Number(old.transaction_no) : list.reduce((m, t) => Math.max(m, Number(t.transaction_no) || 0), 0) + 1;
+                    const rec = {
+                        id: old ? old.id : (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+                        transaction_no: no,
+                        type, title, amount, note,
+                        date: old ? old.date : new Date().toISOString()
+                    };
+                    if (old && old.photo) { rec.photo = old.photo; if (old.photo_rev) rec.photo_rev = old.photo_rev; }
+                    if (photoToUpload) {
+                        const path = `assets/${no}.jpg`;
+                        await store.putFile(path, await blobToBase64(photoToUpload.blob), `Foto transaksi #${no}`);
+                        rec.photo = path;
+                        rec.photo_rev = Date.now();
+                    }
+                    if (idx >= 0) list[idx] = rec; else list.push(rec);
+                    return rec;
+                }, rec => `${editingId ? 'Ubah' : 'Tambah'} transaksi #${rec.transaction_no}: ${title}`);
+
+                if (photoToUpload) {
+                    if (photoCache[result.id]) URL.revokeObjectURL(photoCache[result.id]);
+                    photoCache[result.id] = photoToUpload.previewUrl;   // dipakai langsung, jangan di-revoke
+                    pendingPhoto = null;
+                }
+                setTransactions(data.transactions);
                 closeAddModal();
-                await fetchTransactions();
+                renderDashboard();
+                showToast(photoToUpload ? 'Tersimpan di GitHub. Foto muncul di perangkat lain sekitar 1 menit lagi.' : (editingId ? 'Catatan berhasil diperbarui di GitHub!' : 'Catatan berhasil disimpan di GitHub!'));
             } catch (error) {
                 console.error('Gagal menyimpan transaksi:', error);
                 alert('Gagal menyimpan catatan.\n\nPesan: ' + (error.message || 'Tidak diketahui'));
             } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = document.getElementById('editingId').value ? 'Simpan Perubahan' : 'Simpan Catatan';
+                updateSubmitLabel();
             }
         }
 
         async function deleteTransaction(id) {
-            if (!confirm('Yakin ingin menghapus catatan ini?')) return;
+            if (!isAdmin || !store) return;
+            const t = transactions.find(item => item.id === id);
+            if (!t) return;
+            if (!confirm('Yakin ingin menghapus catatan ini beserta fotonya?')) return;
             try {
-                await dbRequest('readwrite', 'delete', id);
+                const { data } = await store.updateData(d => {
+                    d.transactions = d.transactions.filter(x => x.id !== id);
+                }, `Hapus transaksi #${t.transaction_no}: ${t.title}`);
+                const paths = t.photo ? [t.photo] : ['jpg', 'jpeg', 'png', 'webp'].map(e => `assets/${Number(t.transaction_no)}.${e}`);
+                for (const p of paths) {
+                    try { await store.deleteFile(p, `Hapus foto transaksi #${t.transaction_no}`); } catch (e) { console.warn('Foto tidak terhapus:', p, e); }
+                }
+                if (photoCache[id]) { URL.revokeObjectURL(photoCache[id]); delete photoCache[id]; }
+                setTransactions(data.transactions);
+                renderDashboard();
                 showToast('Catatan berhasil dihapus.');
-                await fetchTransactions();
             } catch (error) {
                 console.error(error);
-                showToast('Gagal menghapus catatan.');
+                showToast(error.message || 'Gagal menghapus catatan.');
             }
         }
 
@@ -549,44 +1013,24 @@
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
         }
 
-        function transactionPhotoPath(transaction) {
-            return `assets/${Number(transaction.transaction_no)}.jpg`;
-        }
-
-        function tryNextTransactionPhoto(img, onAllFailed) {
-            const extensions = ['jpg', 'jpeg', 'png', 'webp'];
-            const current = Number(img.dataset.extensionIndex || 0);
-            const next = current + 1;
-            if (next >= extensions.length) {
-                if (typeof onAllFailed === 'function') onAllFailed();
-                else {
-                    const wrapper = img.parentElement;
-                    if (wrapper) img.style.display = 'none';
-                }
-                return;
-            }
-            img.dataset.extensionIndex = String(next);
-            const transactionNo = img.closest('[data-transaction-no]')?.dataset.transactionNo || img.dataset.transactionNo;
-            const match = img.src.match(/assets\/(\d+)\.[a-z0-9]+(?:\?.*)?$/i);
-            const number = transactionNo || (match && match[1]);
-            if (!number) return;
-            img.src = `assets/${number}.${extensions[next]}`;
-        }
-
+        /* ---------- Util ---------- */
         function formatRupiah(number) {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(number);
         }
         function formatDate(dateString) {
             return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
         }
+        function firstLine(s) { return String(s || '').split('\n')[0]; }
         function escapeHtml(str) {
             return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
+        let toastTimer = null;
         function showToast(message) {
             const toast = document.getElementById('toast');
             toast.innerText = message;
             toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
-            setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 3000);
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none'), 4000);
         }
     </script>
 </body>
