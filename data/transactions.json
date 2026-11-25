@@ -121,6 +121,17 @@
       "date": "2026-11-25T08:42:18.599Z",
       "photo": "assets/11.jpg",
       "photo_rev": 1795596141866
+    },
+    {
+      "id": "2be42051-4649-442f-bb71-915e18a3d05d",
+      "transaction_no": 12,
+      "type": "expense",
+      "title": "ecentio Official Shop Dikemas",
+      "amount": 158784,
+      "note": "Toko: Semua  Belum Bayar ~~ ~~ Penc",
+      "date": "2026-11-25T08:42:48.704Z",
+      "photo": "assets/12.jpg",
+      "photo_rev": 1795596171467
     }
   ]
 }
