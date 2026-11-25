@@ -50,10 +50,9 @@
                 <h1 class="text-2xl font-bold mt-1">Catatan Belanja Mhia</h1>
             </div>
             <div class="flex items-center gap-2">
-                <!-- TOMBOL ADMIN / VIEWER MODE -->
-                <button type="button" onclick="openAdminModal()" id="adminBtn" class="bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm">
-                    <i data-lucide="shield" class="w-3.5 h-3.5"></i>
-                    <span id="adminStatusText">Viewer Mode</span>
+                <!-- PINTU ADMIN TERSEMBUNYI: tap 3x di pojok kanan atas -->
+                <button type="button" onclick="secretTap()" id="adminBtn" aria-label="Admin" class="w-16 h-10 bg-transparent cursor-default">
+                    <span id="adminStatusText"></span>
                 </button>
             </div>
         </div>
@@ -100,7 +99,7 @@
                     <option value="expense">Belanja Barang</option>
                     <option value="income">Tambah Saldo</option>
                 </select>
-                <button type="button" onclick="openAddModal()" id="addModalBtn" class="bg-shopee-orange hover:bg-shopee-dark text-white px-5 py-3 rounded-2xl text-sm font-semibold shadow-lg shadow-orange-500/20 flex items-center gap-2 transition active:scale-95 cursor-pointer">
+                <button type="button" onclick="openAddModal()" id="addModalBtn" class="hidden bg-shopee-orange hover:bg-shopee-dark text-white px-5 py-3 rounded-2xl text-sm font-semibold shadow-lg shadow-orange-500/20 flex items-center gap-2 transition active:scale-95 cursor-pointer">
                     <i data-lucide="plus" class="w-4 h-4"></i>
                     <span>Catat Baru</span>
                 </button>
@@ -257,27 +256,17 @@
                 <h3 class="text-lg font-bold text-slate-800">Admin &amp; Penyimpanan GitHub</h3>
                 <button type="button" onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100 transition"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            <p class="text-xs text-slate-600 leading-relaxed mb-4">Semua catatan disimpan di repositori GitHub (<b>data/transactions.json</b>) dan foto di folder <b>assets/</b>. Untuk menambah/mengubah catatan, masukkan <b>token GitHub</b>. Token hanya disimpan di perangkat ini.</p>
+            <p class="text-xs text-slate-600 leading-relaxed mb-4">Semua catatan disimpan di repositori GitHub (<b>data/transactions.json</b>) dan foto di folder <b>assets/</b>. Masukkan <b>password admin</b> untuk menambah, mengubah, atau menghapus catatan.</p>
             <form onsubmit="submitAdminLogin(event)" class="space-y-3">
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Pemilik repo</label>
-                        <input type="text" id="cfgOwner" autocomplete="off" placeholder="username" class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Nama repo</label>
-                        <input type="text" id="cfgRepo" autocomplete="off" placeholder="Shopee-Mhia" class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
-                    </div>
-                </div>
                 <div>
-                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Token GitHub</label>
-                    <input type="password" id="cfgToken" autocomplete="off" placeholder="github_pat_..." class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
-                    <p class="text-xs text-slate-500 mt-1.5 leading-relaxed">Buat di <a class="text-shopee-orange underline" target="_blank" rel="noopener" href="https://github.com/settings/personal-access-tokens/new">GitHub &rarr; Fine-grained token</a>, pilih hanya repo ini, izin <b>Contents: Read and write</b>.</p>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Password Admin</label>
+                    <input type="password" id="cfgPassword" autocomplete="current-password" placeholder="Masukkan password" class="w-full bg-slate-50 px-3 py-2.5 rounded-xl text-sm border border-slate-200 focus:outline-none focus:border-shopee-orange">
+                    <p class="text-xs text-slate-400 mt-1.5">Di GitHub Pages (tanpa server), isi kolom ini dengan token GitHub.</p>
                 </div>
                 <p id="adminError" class="hidden text-xs text-rose-600 bg-rose-50 rounded-xl px-3 py-2"></p>
                 <button id="adminLoginBtn" type="submit" class="w-full bg-shopee-orange hover:bg-shopee-dark text-white font-semibold py-3 rounded-2xl shadow-lg shadow-orange-500/20 transition cursor-pointer">Masuk sebagai Admin</button>
             </form>
-            <button id="adminLogoutBtn" type="button" onclick="adminLogout()" class="hidden w-full mt-3 border border-slate-200 text-slate-600 font-semibold py-3 rounded-2xl hover:bg-slate-50 transition cursor-pointer">Keluar &amp; hapus token dari perangkat ini</button>
+            <button id="adminLogoutBtn" type="button" onclick="adminLogout()" class="hidden w-full mt-3 border border-slate-200 text-slate-600 font-semibold py-3 rounded-2xl hover:bg-slate-50 transition cursor-pointer">Keluar</button>
             <div id="legacyImportBox" class="hidden mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                 <p class="text-xs text-emerald-800 leading-relaxed">Ditemukan <b id="legacyCount">0</b> catatan lama di browser ini (versi sebelumnya). Pindahkan ke GitHub agar bisa dilihat di semua perangkat.</p>
                 <button id="legacyImportBtn" type="button" onclick="importLegacyRecords()" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm py-2.5 rounded-xl cursor-pointer">Pindahkan ke GitHub</button>
@@ -294,16 +283,14 @@
     <script>
         /*
          * Alur data (tanpa Supabase / database / server):
-         *  - Semua orang  : membaca data/transactions.json dari repo (GitHub Pages).
+         *  - Semua orang  : membaca data/transactions.json dari situs itu sendiri (Vercel).
          *  - Admin        : menulis data/transactions.json dan assets/<nomor>.jpg langsung ke repo
-         *                   lewat GitHub API memakai token (disimpan hanya di perangkat admin).
+         *                   lewat fungsi server /api/github yang memeriksa password admin (token GitHub ada di server).
          *  - Upload gambar: dibaca OCR di browser -> nama produk & total terisi otomatis.
          */
 
-        // Isi hanya jika aplikasi dibuka lewat domain sendiri (bukan *.github.io).
-        const DEFAULT_REPO = { owner: '', repo: '' };
-
-        const CFG_KEY = 'shopeeMhiaGitHub';
+        const ADMIN_ENDPOINT = '/api/github';   // fungsi server Vercel (api/github.js)
+        const CFG_KEY = 'shopeeMhiaAdmin';
         const LEGACY_DB = 'ShopeeMhiaLocalDB';
         const LEGACY_STORE = 'transactions';
         const LEGACY_FLAG = 'shopeeMhiaLegacyImported';
@@ -324,28 +311,32 @@
         function loadConfig() {
             try {
                 const c = JSON.parse(localStorage.getItem(CFG_KEY) || '{}');
-                return { owner: c.owner || '', repo: c.repo || '', token: c.token || '' };
-            } catch (_) { return { owner: '', repo: '', token: '' }; }
+                return { password: c.password || '' };
+            } catch (_) { return { password: '' }; }
         }
         function saveConfig() {
             try { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch (_) { /* abaikan */ }
         }
+        function makeStore(password) {
+            return GitHubStore.createStore({ endpoint: ADMIN_ENDPOINT, headers: { 'x-admin-password': password } });
+        }
+        // Di GitHub Pages tidak ada fungsi server: kolom password dipakai sebagai token GitHub (langsung ke API).
         function repoGuess() {
-            if (cfg.owner && cfg.repo) return { owner: cfg.owner, repo: cfg.repo };
             const h = location.hostname;
-            if (h.endsWith('.github.io')) {
-                const owner = h.split('.')[0];
-                const repo = location.pathname.split('/').filter(Boolean)[0] || (owner + '.github.io');
-                return { owner, repo };
-            }
-            return DEFAULT_REPO.owner && DEFAULT_REPO.repo ? { ...DEFAULT_REPO } : { owner: '', repo: '' };
+            if (!h.endsWith('.github.io')) return null;
+            const owner = h.split('.')[0];
+            return { owner, repo: location.pathname.split('/').filter(Boolean)[0] || (owner + '.github.io') };
+        }
+        function makeDirectStore(token) {
+            const g = repoGuess();
+            return g ? GitHubStore.createStore({ owner: g.owner, repo: g.repo, token }) : null;
         }
 
         /* ---------- Mulai ---------- */
         document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
             updateAdminButton();
-            if (cfg.token && cfg.owner && cfg.repo) await enterAdmin(true);
+            if (cfg.password) await enterAdmin(true);
             else await loadData();
         });
 
@@ -363,14 +354,14 @@
                     const { data } = await store.readData();
                     setTransactions(data.transactions);
                 } else {
-                    const data = await GitHubStore.loadPublic(repoGuess());
+                    const data = await GitHubStore.loadPublic();
                     setTransactions(data.transactions);
                 }
                 renderDashboard();
             } catch (error) {
                 console.error('Gagal memuat data:', error);
                 document.getElementById('transactionList').innerHTML =
-                    '<p class="text-center py-8 text-rose-500 text-sm px-4">Data tidak dapat dimuat dari GitHub. Buka aplikasi lewat alamat GitHub Pages (bukan membuka file langsung), lalu tekan tombol muat ulang.</p>';
+                    '<p class="text-center py-8 text-rose-500 text-sm px-4">Data tidak dapat dimuat dari GitHub. Buka aplikasi lewat alamat Vercel (bukan membuka file langsung), lalu tekan tombol muat ulang.</p>';
                 showToast('Gagal memuat data dari GitHub.');
             }
         }
@@ -383,23 +374,42 @@
             showToast('Data dimuat ulang.');
         }
 
-        /* ---------- Admin (token GitHub) ---------- */
+        /* ---------- Admin (password -> fungsi server -> GitHub) ---------- */
         function updateAdminButton() {
             const btn = document.getElementById('adminBtn');
-            document.getElementById('adminStatusText').innerText = isAdmin ? 'Admin Active' : 'Viewer Mode';
+            document.getElementById('adminStatusText').innerText = isAdmin ? 'Admin' : '';
             btn.className = isAdmin
-                ? 'bg-white/20 border border-white text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm'
-                : 'bg-white/10 hover:bg-white/20 border border-white/30 text-xs px-3 py-2 rounded-xl font-medium transition flex items-center gap-1.5 backdrop-blur-sm cursor-pointer shadow-sm';
+                ? 'bg-white/20 border border-white/60 text-xs px-3 py-2 rounded-xl font-medium backdrop-blur-sm cursor-pointer'
+                : 'w-16 h-10 bg-transparent cursor-default';
+            document.getElementById('addModalBtn').classList.toggle('hidden', !isAdmin);
+        }
+
+        // Tap 3x berturut-turut (dalam 1,5 detik) di pojok kanan atas membuka halaman admin.
+        let tapCount = 0, tapTimer = null;
+        function secretTap() {
+            if (isAdmin) return openAdminModal();
+            tapCount++;
+            clearTimeout(tapTimer);
+            tapTimer = setTimeout(() => { tapCount = 0; }, 1500);
+            if (tapCount >= 3) { tapCount = 0; openAdminModal(); }
         }
 
         async function enterAdmin(silent) {
-            const candidate = GitHubStore.createStore({ owner: cfg.owner, repo: cfg.repo, token: cfg.token });
+            let candidate = makeStore(cfg.password);
             try {
-                await candidate.verify();
+                try {
+                    await candidate.verify();
+                } catch (serverErr) {
+                    // Tidak ada fungsi server (GitHub Pages)? Coba pakai isian sebagai token GitHub langsung.
+                    const direct = serverErr.status === 404 ? makeDirectStore(cfg.password) : null;
+                    if (!direct) throw serverErr;
+                    await direct.verify();
+                    candidate = direct;
+                }
             } catch (e) {
                 if (!silent) throw e;
-                if (e.status === 401) { cfg.token = ''; saveConfig(); }
-                showToast('Mode admin tidak aktif: ' + (e.status ? e.message : 'tidak dapat terhubung ke GitHub.'));
+                if (e.status === 401) { cfg.password = ''; saveConfig(); }
+                showToast('Mode admin tidak aktif: ' + (e.status ? e.message : 'tidak dapat terhubung ke server.'));
                 await loadData();
                 return false;
             }
@@ -412,14 +422,11 @@
         }
 
         async function openAdminModal() {
-            const guess = repoGuess();
-            document.getElementById('cfgOwner').value = cfg.owner || guess.owner;
-            document.getElementById('cfgRepo').value = cfg.repo || guess.repo;
-            document.getElementById('cfgToken').value = '';
-            document.getElementById('cfgToken').placeholder = isAdmin ? '(token tersimpan)' : 'github_pat_...';
+            document.getElementById('cfgPassword').value = '';
             document.getElementById('adminError').classList.add('hidden');
             document.getElementById('adminLogoutBtn').classList.toggle('hidden', !isAdmin);
-            document.getElementById('adminLoginBtn').innerText = isAdmin ? 'Simpan Perubahan' : 'Masuk sebagai Admin';
+            document.getElementById('adminLoginBtn').innerText = 'Masuk sebagai Admin';
+            document.getElementById('adminLoginBtn').classList.toggle('hidden', isAdmin);
             document.getElementById('legacyImportBox').classList.add('hidden');
             document.getElementById('adminModal').classList.remove('hidden');
             lucide.createIcons();
@@ -432,19 +439,17 @@
 
         async function submitAdminLogin(event) {
             event.preventDefault();
-            const owner = document.getElementById('cfgOwner').value.trim();
-            const repo = document.getElementById('cfgRepo').value.trim();
-            const token = document.getElementById('cfgToken').value.trim() || (isAdmin ? cfg.token : '');
+            const password = document.getElementById('cfgPassword').value;
             const errBox = document.getElementById('adminError');
             const btn = document.getElementById('adminLoginBtn');
             const showError = msg => { errBox.textContent = msg; errBox.classList.remove('hidden'); };
             errBox.classList.add('hidden');
-            if (!owner || !repo || !token) return showError('Pemilik repo, nama repo, dan token wajib diisi.');
+            if (!password) return showError('Password wajib diisi.');
             const previous = { ...cfg };
             const label = btn.innerText;
             btn.disabled = true;
-            btn.innerText = 'Memeriksa token...';
-            cfg = { owner, repo, token };
+            btn.innerText = 'Memeriksa...';
+            cfg = { password };
             try {
                 await enterAdmin(false);
                 saveConfig();
@@ -461,12 +466,12 @@
         async function adminLogout() {
             isAdmin = false;
             store = null;
-            cfg.token = '';
+            cfg.password = '';
             saveConfig();
             updateAdminButton();
             renderDashboard();            // sembunyikan tombol edit/hapus seketika
             closeAdminModal();
-            showToast('Keluar dari Mode Admin. Token dihapus dari perangkat ini.');
+            showToast('Keluar dari Mode Admin.');
             await loadData();
         }
 
@@ -661,11 +666,7 @@
 
         /* ---------- Form catat transaksi ---------- */
         function openAddModal() {
-            if (!isAdmin) {
-                showToast('Masuk sebagai Admin dulu untuk mulai mencatat.');
-                openAdminModal();
-                return;
-            }
+            if (!isAdmin) return;
             resetTransactionForm();
             document.getElementById('modalTitle').innerText = 'Catat Transaksi Baru';
             updateSubmitLabel();
