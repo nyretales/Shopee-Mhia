@@ -88,6 +88,17 @@
       "date": "2026-11-25T08:40:50.015Z",
       "photo": "assets/8.jpg",
       "photo_rev": 1795596054217
+    },
+    {
+      "id": "ee4057f5-4a46-40a3-972e-d590f0f17848",
+      "transaction_no": 9,
+      "type": "expense",
+      "title": "Case with Keyboard for Infinix Xpad 30 Pro",
+      "amount": 273000,
+      "note": "Toko: Forsakey",
+      "date": "2026-11-25T08:41:28.216Z",
+      "photo": "assets/9.jpg",
+      "photo_rev": 1795596091576
     }
   ]
 }
